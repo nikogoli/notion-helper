@@ -45,6 +45,14 @@ type ToBlockInput = {
     children: Array<BlockObjectRequest> | null,
 }
 
+
+type TokenizeError = {
+    msg: string,
+    type: "not implemented" | "attribute missing" | "unexpected node-tree",
+    elem: Element
+}
+
+
 type UnitScrap = {
     thread_idx: string,
     scrap_idx: string,
@@ -107,7 +115,7 @@ function plaintx_to_richtx(
     let base = base_node
     while( tag != "end" ){
         const par = base.parentElement
-        if (par !== null && ["A", "SUP", "CODE", "EMBED-KATEX", "STRONG", "EM", "S"].includes(par.nodeName) ){
+        if (par !== null && ["A", "SUP", "CODE", "STRONG", "EM", "S"].includes(par.nodeName) ){
             if (par.nodeName == "A"){ link = par.getAttribute("href") ?? undefined }
             annotations.push(par.nodeName)
             tag = par.nodeName
@@ -125,276 +133,155 @@ function plaintx_to_richtx(
 }
 
 
-function flatten_childs(
-    el: Element,
-){
-    const results: Array<{Node:Node}|{Elem:Element}> = []
-    const elems = Array.from(el.children)
-    el.childNodes.forEach( (child, _idx) => {
-        if (child.nodeName == "#text"){
-            if (check_textnode(child)){
-                results.push({Node: child})
-            }
-        } else {
-            const elem = elems.shift()
-            if (elem === undefined){ throw new Error("failed to get element") }
-
-            if (elem.nodeName == "A" && elem.getAttribute("style") == "display: none"){
-                results.push({Elem: elem})
-            }
-            //else if ( elem.nodeName == "BR"){
-            //    if (el.childNodes[idx-1].nodeName == "BR" ){
-            //        results.push({Elem: elem})    
-            //    }
-            //}
-            else if (["A", "SUP", "CODE", "STRONG", "EM", "S"].includes(elem.nodeName)){
-                flatten_childs(elem).forEach(x => results.push(x))
-            } else {
-                results.push({Elem: elem})
-            }
-        }
-    })
-    return results
-}
-
-
-function tokenize_other(
+function tokenize(
     elem: Element,
-): BlockObjectRequest{
-    switch (elem.nodeName){
-        case "H1":
-            return to_block({type: "H1", text: elem.innerText.trimStart()})
-        case "H2":
-            return to_block({type: "H2", text: elem.innerText.trimStart()})
-        case "H3":
-        case "H4":
-            return to_block({type: "H3", text: elem.innerText.trimStart()})
-        case "TABLE":{
-            const text = elem.innerHTML.replaceAll("\n", "").replaceAll(/\<\/th\>\<\/tr\>|\<\/td\>\<\/tr\>/g,"\n").replaceAll(/\<\/th\>|\<\/td\>/g,"\t").replaceAll(/\<.+?\>/g, "").trimEnd()
-            return to_block({type: "TABLE", text})
-        }
-        case "HR":
-            return to_block({ type: "HR" })
-        case "IMG":{
-            const link = elem.getAttribute("src")
-            if (link !== null){
-                return to_block({ type: "IMG", link })
-            } else {
-                throw new Error("IMG element doen not have 'src'.")
-            }
-        }
-        case "SECTION":{
-            if (elem.className == "footnotes") {
-                const firstline: Extract<BlockObjectRequest, {type?:"paragraph"}> = { type: "paragraph", paragraph:{ rich_text: to_richtx("text", "注釈")} }
-                const children = Array.from(elem.getElementsByClassName("footnote-item"))
-                    .map(no => no.getElementsByTagName("p")[0])
-                    .map(p => {
-                        const { firstline, children } = arrange_children( tokenize_p(p) )
-                        return to_block({ type:"OLITEM", firstline, children })
-                    })
-                return to_block({ type:"FOOTNOTE", firstline, children })
-            }
-            else if (elem.className == "zenn-katex"){
-                return to_block({ type:"EQUATION", text: elem.innerText.split("\n")[1] })
-            } else {
-                return to_block({type:"PARAGRAPH", rich_text: []})
-            }
-        }
-        case "BLOCKQUOTE":{
-            const { firstline, children } = arrange_children( tokenize_page(elem) )
-            return to_block({ type:"BLOCKQUOTE", firstline, children })
-        }
-        case "ASIDE":{
-            if (elem.className == "msg message" || elem.className == "msg alert"){
-                const kind = (elem.className.split(" ")[1] == "message") ? "message": "alert"
-                const content_node = elem.getElementsByClassName("msg-content")[0]
-                const { firstline, children } = arrange_children( tokenize_page(content_node) )
-                return to_block({ type:"MESSAGE", kind, firstline, children })
-            } else {
-                return to_block({type:"PARAGRAPH", rich_text: []})
-            }
-        }
-        case "DETAILS":{
-            const title = elem.getElementsByTagName("summary")[0].innerText
-            const content_node = elem.getElementsByClassName("details-content")[0]
-            const firstline: Extract<BlockObjectRequest, {type?:"paragraph"}>  = { type:"paragraph", paragraph:{ rich_text: to_richtx("text", title) } }
-            const children = tokenize_page(content_node)
-            return to_block({ type:"DETAILS", firstline, children })
-        }
-        case "DIV":{
-            if ( elem.className == "code-block-container" ) {
-                const code_node = elem.getElementsByTagName("code")[0]
-                const language = (code_node.className!="") ? code_node.className.split("-").reverse()[0] : "plain text"
-                return to_block({ type:"CODE", language, text:code_node.innerText.slice(0, -1) })
-            } else if ( elem.className.startsWith("embed-") ){
-                const iframe = elem.children[0]
-                const link = iframe.getAttribute("src")
-                if (link !== null){
-                    return { type:"embed", embed: {url: link} }
-                } else {
-                    return { type:"callout", callout: { color: "default", rich_text: to_richtx("text", "埋め込み要素(取得失敗)") } }
-                }
-            } else if ( elem.className.startsWith("zenn-embedded") && !elem.className.includes("card") ){
-                const name = elem.className.split("-").reverse()[0]
-                return { type:"callout", callout: { color: "default", rich_text: to_richtx("text", `埋め込み要素 ${name} (取得不可能) `) } }
-            }
-            else {
-                return to_block({type:"PARAGRAPH", rich_text: []})
-            }
-        }
-        default:
-            console.log(elem)
-            throw new Error("invalid input")
-    }
-}
-
-
-function tokenize_li(
-    elem: Element,
-){
-    const blocks: Array<BlockObjectRequest> = []
-
-    const rich_txs =  flatten_childs(elem).reduce( (list, item) => {
-        if ("Elem" in item){
-            if (item.Elem.nodeName == "EMBED-KATEX"){
-                list.push(plaintx_to_richtx(item.Elem)[0])
-                return list
-            }
-            if (list.length > 0){
-                blocks.push( to_block({type: "PARAGRAPH", rich_text: list}) )
-            }
-            if (item.Elem.nodeName == "A" && item.Elem.getAttribute("style") == "display: none"){
-                const link = item.Elem.getAttribute("href")
-                if (link === null){
-                    throw new Error("IMG element doen not have 'href'.")
-                }
-                blocks.push( to_block({type: "BOOKMARK", link}) )
-            }
-            if (item.Elem.nodeName == "IMG"){
-                const link = item.Elem.getAttribute("src")
-                if (link === null){  throw new Error("IMG element doen not have 'src'.") }
-                blocks.push( to_block({type: "IMG", link}) )
-            }
-            else if (item.Elem.nodeName == "BR"){
-                if (list.length == 0){
-                    blocks.push( to_block({type: "PARAGRAPH", rich_text: []}) ) 
-                }
-            }
-            else if ( item.Elem.nodeName =="UL" || item.Elem.nodeName == "OL") {
-                tokenize_list(item.Elem).forEach( bl => blocks.push(bl))
-            }
-            else if (["H1", "H2", "H3", "H4", "TABLE", "HR", "IMG", "SECTION", "BLOCKQUOTE", "BLOCKQUOTE", "ASIDE", "DETAILS", "DIV"].includes(item.Elem.nodeName)) {
-                blocks.push(tokenize_other(item.Elem))
-            }
-            return []
-        } else {
-            if (item.Node.nodeName == "#text") {
-                if (check_textnode(item.Node)){
-                    list.push(plaintx_to_richtx(item.Node)[0])
-                }
-            }
-            return list
-        }
-    }, [] as Array<RichTextItemRequest> )
-    if (rich_txs.length >0){
-        blocks.push( to_block({type: "PARAGRAPH", rich_text: rich_txs}) )
-    }
-    
-    return blocks
-}
-
-
-function tokenize_p(
-    elem: Element,
-): Array<BlockObjectRequest> {
-
-    const blocks: Array<BlockObjectRequest> = []
-
-    const rich_txs = flatten_childs(elem).reduce( (list, item) => {
-        if ("Elem" in item){
-            if (item.Elem.nodeName == "EMBED-KATEX"){
-                list.push(plaintx_to_richtx(item.Elem)[0])
-                return list
-            }
-            if (list.length > 0){
-                blocks.push( to_block({type: "PARAGRAPH", rich_text: list}) )
-            }
-            if (item.Elem.nodeName == "IMG"){
-                const link = item.Elem.getAttribute("src")
-                if (link === null){ throw new Error("IMG element doen not have 'src'.") }
-                blocks.push( to_block({type: "IMG", link}) )
-            }
-            else if (item.Elem.nodeName == "BR"){
-                if (list.length == 0){
-                    blocks.push( to_block({type: "PARAGRAPH", rich_text: []}) ) 
-                }
-            }
-            return []
-        } else {
-            if (item.Node.nodeName == "#text") {
-                if (check_textnode(item.Node)){
-                    list.push(plaintx_to_richtx(item.Node)[0])
-                }
-            }
-            return list
-        }
-    }, [] as Array<RichTextItemRequest> )
-    if (rich_txs.length >0){
-        blocks.push( to_block({type: "PARAGRAPH", rich_text: rich_txs}) )
-    }
-    
-    return blocks
-}
-
-
-function tokenize_list(
-    elem: Element,    
-): Array<BlockObjectRequest> {
-    if (elem.nodeName != "UL" && elem.nodeName != "OL"){ throw new Error("invalid input") }
-    const list_items = Array.from(elem.children).map(li => {
-        if (Array.from(li.children).map(x => x.nodeName).includes("P") ){
-            return tokenize_page(li)
-        } else {
-            return tokenize_li(li)
-        }
-    })
-    .map(contents => {
-        const { firstline, children } = arrange_children(contents)
-        if (elem.nodeName == "UL"){
-            return to_block({type:"ULITEM", firstline, children})
-        } else {
-            return to_block({type:"OLITEM", firstline, children})
-        }
-    })
-    return list_items
-}
-
-
-function tokenize_page(
-    node: Element,
 ): Array<BlockObjectRequest>{
+    const errors: Array<TokenizeError> = []
     const blocks: Array<BlockObjectRequest> = []
-    Array.from(node.children).forEach( child => {
-        if (child.nodeName == "P"){
-            tokenize_p(child).forEach( tk => blocks.push(tk) )
-        }
-        else if (child.nodeName == "A" && child.getAttribute("style") != "display: none"){
-            const link = child.getAttribute("href")
-            if (link === null){
-                throw new Error("A-element doen not have 'href'.")
+    const elements = Array.from(elem.children)
+    Array.from(elem.childNodes).forEach( child_nd => {
+        if (child_nd.nodeName == "#text"){
+            if (check_textnode(child_nd)){
+                const rich_text = plaintx_to_richtx(child_nd)
+                blocks.push( to_block({ type:"PARAGRAPH", rich_text }) )
             }
-            blocks.push( to_block({ type: "BOOKMARK", link}) )
-        }
-        else if (child.nodeName == "BR"){
-            blocks.push( to_block({ type: "BR"}) )
-        }
-        else if (child.nodeName == "UL" || child.nodeName == "OL") {
-            tokenize_list(child).forEach(bl => blocks.push(bl))
-        }
-        else if (["H1", "H2", "H3", "H4", "TABLE", "HR", "IMG", "SECTION", "BLOCKQUOTE", "BLOCKQUOTE", "ASIDE", "DETAILS", "DIV"].includes(child.nodeName)) {
-            blocks.push(tokenize_other(child))
+        } else {
+            const elem = elements.shift()
+            if (elem === undefined){ 
+                console.log(child_nd)
+                throw new Error("faild to get the corresponding element for this node")
+            }
+            if (elem.nodeName == "P"){
+                if (elem.childNodes.length > 0){
+                    tokenize(elem).forEach( tk => blocks.push(tk) )
+                }
+            }
+            else if (elem.nodeName == "EMBED-KATEX"){
+                const rich_text = plaintx_to_richtx(elem)
+                blocks.push( to_block({ type:"PARAGRAPH", rich_text }) )
+            }
+            else if ( ["SUP", "CODE", "STRONG", "EM", "S"].includes(elem.nodeName) &&
+                ( elem.nodeName == "A" && elem.getAttribute("style") === null )
+            ){
+                tokenize(elem).forEach( tk => blocks.push(tk) )
+            }
+            else if (elem.nodeName == "BR"){
+                blocks.push( to_block({ type: "BR"}) )
+            }
+            else if (elem.nodeName == "UL" || elem.nodeName == "OL") {
+                Array.from(elem.children).map(li => tokenize(li))
+                .map(contents => {
+                    const { firstline, children } = arrange_children(contents)
+                    blocks.push( (elem.nodeName == "UL") ? to_block({type:"ULITEM", firstline, children}) : to_block({type:"OLITEM", firstline, children})
+                    )
+                })
+            }
+            else if (elem.nodeName == "H1"){
+                blocks.push( to_block({type: "H1", text: elem.innerText.trimStart()}) )
+            }
+            else if (elem.nodeName == "H2"){
+                blocks.push( to_block({type: "H2", text: elem.innerText.trimStart()}) )
+            }
+            else if (elem.nodeName == "H3" || elem.nodeName == "H4"){
+                blocks.push( to_block({type: "H3", text: elem.innerText.trimStart()}) )
+            }
+            else if (elem.nodeName == "TABLE"){
+                const text = elem.innerHTML.replaceAll("\n", "").replaceAll(/\<\/th\>\<\/tr\>|\<\/td\>\<\/tr\>/g,"\n")
+                    .replaceAll(/\<\/th\>|\<\/td\>/g,"\t").replaceAll(/\<.+?\>/g, "").trimEnd()
+                blocks.push( to_block({type: "TABLE", text}) )
+            }
+            else if (elem.nodeName == "HR"){
+                blocks.push( to_block({ type: "HR" }) )
+            }
+            else if (elem.nodeName == "IMG"){
+                const link = elem.getAttribute("src")
+                if (link !== null){
+                    blocks.push( to_block({ type: "IMG", link }) )
+                } else {
+                    errors.push({ msg: "IMG-element does not have 'src'", type:"attribute missing", elem})
+                }
+            }
+            else if (elem.nodeName == "SECTION"){
+                if (elem.className == "footnotes") {
+                    const firstline: Extract<BlockObjectRequest, {type?:"paragraph"}> = { type: "paragraph", paragraph:{ rich_text: to_richtx("text", "注釈")} }
+                    const children = Array.from(elem.getElementsByClassName("footnote-item"))
+                        .map(item => item.getElementsByTagName("p")[0])
+                        .map(p => {
+                            const { firstline, children } = arrange_children( tokenize(p) )
+                            return to_block({ type:"OLITEM", firstline, children })
+                        })
+                    blocks.push( to_block({ type:"FOOTNOTE", firstline, children }) )
+                }
+                else if (elem.className == "zenn-katex"){
+                    blocks.push( to_block({ type:"EQUATION", text: elem.innerText.split("\n")[1] }) )
+                } else {
+                    errors.push({ msg: "This SECTION-element is not implemented", type:"not implemented", elem })
+                }
+            }
+            else if (elem.nodeName == "BLOCKQUOTE"){
+                const { firstline, children } = arrange_children( tokenize(elem) )
+                blocks.push( to_block({ type:"BLOCKQUOTE", firstline, children }) )
+            }
+            else if (elem.nodeName == "ASIDE"){
+                if (elem.className == "msg message" || elem.className == "msg alert"){
+                    const kind = (elem.className.split(" ")[1] == "message") ? "message": "alert"
+                    const content_node = elem.getElementsByClassName("msg-content")[0]
+                    const { firstline, children } = arrange_children( tokenize(content_node) )
+                    blocks.push( to_block({ type:"MESSAGE", kind, firstline, children }) )
+                } else {
+                    errors.push({ msg: "This ASIDE-element is not implemented", type:"not implemented", elem })
+                }
+            }
+            else if (elem.nodeName == "DETAILS"){
+                const title = elem.getElementsByTagName("summary")[0].innerText
+                const content_node = elem.getElementsByClassName("details-content")[0]
+                const firstline: Extract<BlockObjectRequest, {type?:"paragraph"}>  = { type:"paragraph", paragraph:{ rich_text: to_richtx("text", title) } }
+                const children = tokenize(content_node)
+                blocks.push( to_block({ type:"DETAILS", firstline, children }) )
+            }
+            else if (elem.nodeName == "DIV"){
+                if ( elem.className == "code-block-container" ) {
+                    const code_node = elem.getElementsByTagName("code")[0]
+                    const language = (code_node.className!="") ? code_node.className.split("-").reverse()[0] : "plain text"
+                    blocks.push( to_block({ type:"CODE", language, text:code_node.innerText.slice(0, -1) }) )
+                }
+                else if (["zenn-embedded zenn-embedded-link-card", "zenn-embedded zenn-embedded-github"].includes(elem.className)){
+                    const a_elem = elem.nextElementSibling
+                    if (a_elem !== null){
+                        const link = a_elem.getAttribute("href")
+                        if (link !== null){
+                            blocks.push( to_block({ type: "BOOKMARK", link}) )
+                        } else {
+                            errors.push( { msg: "A-element does not have 'href'", type:"attribute missing", elem: a_elem })
+                        }
+                    } else {
+                        errors.push( { msg: "failed to get corresponding A-element", type:"unexpected node-tree", elem })
+                    }
+                }
+                else if ( elem.className.startsWith("zenn-embedded")){
+                    const name = elem.className.split("-").reverse()[0]
+                    blocks.push( { type:"callout", callout: { color: "default", rich_text: to_richtx("text", `埋め込み要素 ${name} (取得不可能) `) } } )
+                }            
+                else if ( elem.className.startsWith("embed-") ){
+                    const iframe = elem.children[0]
+                    const link = iframe.getAttribute("src")
+                    if (link !== null){
+                        blocks.push( { type:"embed", embed: {url: link} } )
+                    } else {
+                        blocks.push( { type:"callout", callout: { color: "default", rich_text: to_richtx("text", "埋め込み要素(取得失敗)") } } )
+                    }
+                } 
+                else {
+                    errors.push({ msg: "This DIV-element is not implemented", type:"not implemented", elem })
+                }
+            }
         }
     })
+    if (errors.length > 0){
+        errors.forEach( er => {
+            console.log({ msg: er.msg, elem: er.elem.outerHTML })
+        })
+    }
     return blocks
 }
 
@@ -678,7 +565,7 @@ export async function scrap_to_blocks(
         Array.from(items.getElementsByClassName("znc BodyCommentContent_bodyCommentContainer__WXWq0"))
         .forEach( (scrap_node, sc_idx) =>  {
             const scrap_idx = `${th_idx}_${sc_idx}`
-            const content = tokenize_page(scrap_node)
+            const content = tokenize(scrap_node)
             if (scrap_node.parentElement !== null
                 && scrap_node.parentElement.parentElement !== null
                 && scrap_node.parentElement.parentElement.previousElementSibling !== null
@@ -779,7 +666,7 @@ export async function article_to_blocks(
 	
 
     const article_body = document.getElementsByClassName("znc BodyContent_anchorToHeadings__Vl0_u")[0]
-    const content = tokenize_page(article_body)
+    const content = tokenize(article_body)
     
     const block_info: Record<string, BlockInfo> = {}
 

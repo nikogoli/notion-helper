@@ -79,14 +79,6 @@ type BlockInfo = {
 }
 
 
-function check_textnode(
-    elem: Node
-){
-    const text = elem.textContent.replaceAll("\n", "").replaceAll("　", "")
-    return ( text != "" )
-}
-
-
 function arrange_children(
     contents: Array<BlockObjectRequest>,
 ){
@@ -112,6 +104,7 @@ function plaintx_to_richtx(
     const annotations: Array<string> = []
     let link: undefined | string = undefined
     let tag = "start"
+
     let base = base_node
     while( tag != "end" ){
         const par = base.parentElement
@@ -124,28 +117,64 @@ function plaintx_to_richtx(
             tag = "end"
         }
     }
+
     const text = to_richtx(
         (base_node.nodeName == "EMBED-KATEX") ? "equation" : "text",
-        (base_node.nodeName == "EMBED-KATEX") ? (base_node as Element).innerText : base_node.textContent,
+        (base_node.nodeName == "EMBED-KATEX") ? (base_node as Element).innerText : base_node.textContent.trim(),
         link
     )
     return set_annos(text, annotations)
 }
 
 
-function tokenize(
-    elem: Element,
+function to_blocks(
+    element: Element,
+    texts: Array<RichTextItemRequest> = []
 ): Array<BlockObjectRequest>{
     const errors: Array<TokenizeError> = []
     const blocks: Array<BlockObjectRequest> = []
-    const elements = Array.from(elem.children)
-    Array.from(elem.childNodes).forEach( child_nd => {
+    const elements = Array.from(element.children)
+    
+    Array.from(element.childNodes).forEach( child_nd => {
         if (child_nd.nodeName == "#text"){
-            if (check_textnode(child_nd)){
-                const rich_text = plaintx_to_richtx(child_nd)
-                blocks.push( to_block({ type:"PARAGRAPH", rich_text }) )
+            if (child_nd.textContent.replaceAll("\n", "").replaceAll("　", "") != ""){
+                plaintx_to_richtx(child_nd).forEach( tx => texts.push(tx) )
+            }
+        }
+        else if (child_nd.nodeName == "EMBED-KATEX"){
+            elements.shift()
+            plaintx_to_richtx(child_nd).forEach( tx => texts.push(tx) )
+        }
+        else if ( ["A", "SUP", "CODE", "STRONG", "EM", "S"].includes(child_nd.nodeName)){
+            const elem = elements.shift()
+            if (elem == undefined){
+                console.log(child_nd)
+                throw new Error("faild to get the corresponding element for this node")
+            }
+            if (elem.nodeName != "A" || (elem.nodeName == "A" && elem.getAttribute("style") === null) ){
+                const inner_blocks = to_blocks(elem, texts)
+                texts = []
+                const list = inner_blocks.reduce( (tx_list, block) => {
+                    if (block.type == "paragraph"){
+                        block.paragraph.rich_text.forEach(tx => tx_list.push(tx))
+                        return tx_list
+                    } else {
+                        if (tx_list.length > 0){
+                            blocks.push( create_block({ type:"PARAGRAPH", rich_text: tx_list }) )
+                        }
+                        blocks.push(block)
+                        return []
+                    }
+                }, [] as Array<RichTextItemRequest>)
+                if (list.length > 0){
+                    list.forEach(tx => texts.push(tx))
+                }
             }
         } else {
+            if (texts.length > 0){
+                blocks.push( create_block({ type:"PARAGRAPH", rich_text: texts }) )
+                texts = []
+            }
             const elem = elements.shift()
             if (elem === undefined){ 
                 console.log(child_nd)
@@ -153,50 +182,43 @@ function tokenize(
             }
             if (elem.nodeName == "P"){
                 if (elem.childNodes.length > 0){
-                    tokenize(elem).forEach( tk => blocks.push(tk) )
+                    to_blocks(elem).forEach( tk => blocks.push(tk) )
                 }
             }
-            else if (elem.nodeName == "EMBED-KATEX"){
-                const rich_text = plaintx_to_richtx(elem)
-                blocks.push( to_block({ type:"PARAGRAPH", rich_text }) )
-            }
-            else if ( ["SUP", "CODE", "STRONG", "EM", "S"].includes(elem.nodeName) &&
-                ( elem.nodeName == "A" && elem.getAttribute("style") === null )
-            ){
-                tokenize(elem).forEach( tk => blocks.push(tk) )
-            }
             else if (elem.nodeName == "BR"){
-                blocks.push( to_block({ type: "BR"}) )
+                if (elem.nextElementSibling?.nodeName == "BR"){
+                    blocks.push( create_block({ type: "BR"}) )
+                }
             }
             else if (elem.nodeName == "UL" || elem.nodeName == "OL") {
-                Array.from(elem.children).map(li => tokenize(li))
+                Array.from(elem.children).map(li => to_blocks(li))
                 .map(contents => {
                     const { firstline, children } = arrange_children(contents)
-                    blocks.push( (elem.nodeName == "UL") ? to_block({type:"ULITEM", firstline, children}) : to_block({type:"OLITEM", firstline, children})
+                    blocks.push( (elem.nodeName == "UL") ? create_block({type:"ULITEM", firstline, children}) : create_block({type:"OLITEM", firstline, children})
                     )
                 })
             }
             else if (elem.nodeName == "H1"){
-                blocks.push( to_block({type: "H1", text: elem.innerText.trimStart()}) )
+                blocks.push( create_block({type: "H1", text: elem.innerText.trimStart()}) )
             }
             else if (elem.nodeName == "H2"){
-                blocks.push( to_block({type: "H2", text: elem.innerText.trimStart()}) )
+                blocks.push( create_block({type: "H2", text: elem.innerText.trimStart()}) )
             }
-            else if (elem.nodeName == "H3" || elem.nodeName == "H4"){
-                blocks.push( to_block({type: "H3", text: elem.innerText.trimStart()}) )
+            else if ( ["H3", "H4", "H5", "H6"].includes(elem.nodeName) ){
+                blocks.push( create_block({type: "H3", text: elem.innerText.trimStart()}) )
             }
             else if (elem.nodeName == "TABLE"){
                 const text = elem.innerHTML.replaceAll("\n", "").replaceAll(/\<\/th\>\<\/tr\>|\<\/td\>\<\/tr\>/g,"\n")
                     .replaceAll(/\<\/th\>|\<\/td\>/g,"\t").replaceAll(/\<.+?\>/g, "").trimEnd()
-                blocks.push( to_block({type: "TABLE", text}) )
+                blocks.push( create_block({type: "TABLE", text}) )
             }
             else if (elem.nodeName == "HR"){
-                blocks.push( to_block({ type: "HR" }) )
+                blocks.push( create_block({ type: "HR" }) )
             }
             else if (elem.nodeName == "IMG"){
                 const link = elem.getAttribute("src")
                 if (link !== null){
-                    blocks.push( to_block({ type: "IMG", link }) )
+                    blocks.push( create_block({ type: "IMG", link }) )
                 } else {
                     errors.push({ msg: "IMG-element does not have 'src'", type:"attribute missing", elem})
                 }
@@ -207,27 +229,27 @@ function tokenize(
                     const children = Array.from(elem.getElementsByClassName("footnote-item"))
                         .map(item => item.getElementsByTagName("p")[0])
                         .map(p => {
-                            const { firstline, children } = arrange_children( tokenize(p) )
-                            return to_block({ type:"OLITEM", firstline, children })
+                            const { firstline, children } = arrange_children( to_blocks(p) )
+                            return create_block({ type:"OLITEM", firstline, children })
                         })
-                    blocks.push( to_block({ type:"FOOTNOTE", firstline, children }) )
+                    blocks.push( create_block({ type:"FOOTNOTE", firstline, children }) )
                 }
                 else if (elem.className == "zenn-katex"){
-                    blocks.push( to_block({ type:"EQUATION", text: elem.innerText.split("\n")[1] }) )
+                    blocks.push( create_block({ type:"EQUATION", text: elem.innerText.split("\n")[1] }) )
                 } else {
                     errors.push({ msg: "This SECTION-element is not implemented", type:"not implemented", elem })
                 }
             }
             else if (elem.nodeName == "BLOCKQUOTE"){
-                const { firstline, children } = arrange_children( tokenize(elem) )
-                blocks.push( to_block({ type:"BLOCKQUOTE", firstline, children }) )
+                const { firstline, children } = arrange_children( to_blocks(elem) )
+                blocks.push( create_block({ type:"BLOCKQUOTE", firstline, children }) )
             }
             else if (elem.nodeName == "ASIDE"){
                 if (elem.className == "msg message" || elem.className == "msg alert"){
                     const kind = (elem.className.split(" ")[1] == "message") ? "message": "alert"
                     const content_node = elem.getElementsByClassName("msg-content")[0]
-                    const { firstline, children } = arrange_children( tokenize(content_node) )
-                    blocks.push( to_block({ type:"MESSAGE", kind, firstline, children }) )
+                    const { firstline, children } = arrange_children( to_blocks(content_node) )
+                    blocks.push( create_block({ type:"MESSAGE", kind, firstline, children }) )
                 } else {
                     errors.push({ msg: "This ASIDE-element is not implemented", type:"not implemented", elem })
                 }
@@ -236,21 +258,21 @@ function tokenize(
                 const title = elem.getElementsByTagName("summary")[0].innerText
                 const content_node = elem.getElementsByClassName("details-content")[0]
                 const firstline: Extract<BlockObjectRequest, {type?:"paragraph"}>  = { type:"paragraph", paragraph:{ rich_text: to_richtx("text", title) } }
-                const children = tokenize(content_node)
-                blocks.push( to_block({ type:"DETAILS", firstline, children }) )
+                const children = to_blocks(content_node)
+                blocks.push( create_block({ type:"DETAILS", firstline, children }) )
             }
             else if (elem.nodeName == "DIV"){
                 if ( elem.className == "code-block-container" ) {
                     const code_node = elem.getElementsByTagName("code")[0]
                     const language = (code_node.className!="") ? code_node.className.split("-").reverse()[0] : "plain text"
-                    blocks.push( to_block({ type:"CODE", language, text:code_node.innerText.slice(0, -1) }) )
+                    blocks.push( create_block({ type:"CODE", language, text:code_node.innerText.slice(0, -1) }) )
                 }
                 else if (["zenn-embedded zenn-embedded-link-card", "zenn-embedded zenn-embedded-github"].includes(elem.className)){
                     const a_elem = elem.nextElementSibling
                     if (a_elem !== null){
                         const link = a_elem.getAttribute("href")
                         if (link !== null){
-                            blocks.push( to_block({ type: "BOOKMARK", link}) )
+                            blocks.push( create_block({ type: "BOOKMARK", link}) )
                         } else {
                             errors.push( { msg: "A-element does not have 'href'", type:"attribute missing", elem: a_elem })
                         }
@@ -277,10 +299,16 @@ function tokenize(
             }
         }
     })
+    if (texts.length > 0){
+        blocks.push( create_block({ type:"PARAGRAPH", rich_text: texts }) )
+        texts = []
+    }
     if (errors.length > 0){
-        errors.forEach( er => {
+        const is_throw = errors.reduce( (bool, er) => {
             console.log({ msg: er.msg, elem: er.elem.outerHTML })
-        })
+            return (bool) ? bool : er.type != "not implemented"
+        }, false)
+        if (is_throw){ throw new Error("Some error in block making") }
     }
     return blocks
 }
@@ -345,7 +373,7 @@ function set_annos(
 }
 
 
-function to_block(
+function create_block(
     item: ToBlockInput
 ): Required<BlockObjectRequest> {
     const { type } = item
@@ -565,7 +593,7 @@ export async function scrap_to_blocks(
         Array.from(items.getElementsByClassName("znc BodyCommentContent_bodyCommentContainer__WXWq0"))
         .forEach( (scrap_node, sc_idx) =>  {
             const scrap_idx = `${th_idx}_${sc_idx}`
-            const content = tokenize(scrap_node)
+            const content = to_blocks(scrap_node)
             if (scrap_node.parentElement !== null
                 && scrap_node.parentElement.parentElement !== null
                 && scrap_node.parentElement.parentElement.previousElementSibling !== null
@@ -666,7 +694,7 @@ export async function article_to_blocks(
 	
 
     const article_body = document.getElementsByClassName("znc BodyContent_anchorToHeadings__Vl0_u")[0]
-    const content = tokenize(article_body)
+    const content = to_blocks(article_body)
     
     const block_info: Record<string, BlockInfo> = {}
 

@@ -15,6 +15,7 @@ import {
 import {
     BlockInfo,
     ToBlockInput,
+    TEX_TAGS,
     VALID_IMAGEFILE,
     VALID_LANGNAME,
 } from "./mod.ts"
@@ -59,12 +60,17 @@ export function plaintx_to_richtx(
         }
     }
 
-    const text = to_richtx(
-        (base_node.nodeName == "EMBED-KATEX") ? "equation" : "text",
-        (base_node.nodeName == "EMBED-KATEX") ? (base_node as Element).innerText : base_node.textContent.trim(),
-        link
-    )
-    return set_annos(text, annotations)
+    if (TEX_TAGS.includes(base_node.nodeName)){
+        const input = (base_node.nodeName == "EMBED_KATEX")
+            ? (base_node as Element).innerText.split("\n")[0]
+            : (base_node as Element).innerHTML
+            const text = to_richtx( "equation", input, link )
+            return set_annos(text, annotations) 
+    }
+    else {
+        const text = to_richtx( "text", base_node.textContent.trim(), link)
+        return set_annos(text, annotations)
+    }
 }
 
 

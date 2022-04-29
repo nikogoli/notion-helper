@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/x/sift@0.5.0/mod.ts";
+import { serve, PathParams } from "https://deno.land/x/sift@0.5.0/mod.ts";
 import { ConnInfo } from "https://deno.land/std/http/server.ts";
 
 import { Client} from "https://deno.land/x/notion_sdk/src/mod.ts"
@@ -7,9 +7,10 @@ import {
 } from "https://deno.land/x/notion_sdk/src/api-endpoints.ts"
 
 import { 
-    article_to_blocks,
-    scrap_to_blocks,
-    ZennResponse,
+    zenn_article_to_blocks,
+    zenn_scrap_to_blocks,
+    note_article_to_blocks,
+    PageData,
  } from "https://pax.deno.dev/nikogoli/notion-helper/mod.ts"
 
 
@@ -25,14 +26,12 @@ const HEADER_OPS = {
     'Access-Control-Allow-Method':  'OPTIONS, POST, PATCH, GET',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Headers': 'Content-Type, Origin, Authorization',
-    'Access-Control-Allow-Origin': 'https://zenn.dev',
 }
 
 
-async function call_api(
-    headers: Headers,
+async function call_api<T>(
     target_id: string,
-    body: ZennResponse,
+    body: PageData<T>,
 ) {
     const { title, author, topics, icon, max, topblock_ids, children_ids, data } = body
     const children = topblock_ids.map(id => data[id].block)
@@ -88,7 +87,8 @@ async function data_to_page(
   	request: Request,
 	
 ){
-    const headers = new Headers(HEADER_OPS)
+    const header_ops = check_origin(request.headers, HEADER_OPS)
+    const headers = new Headers(header_ops)
 
     const auth_head = request.headers.get("Authorization")
     if (auth_head === null) {
@@ -102,20 +102,61 @@ async function data_to_page(
 
 	const request_json: RequestJson = await request.json()
   	const { url, html_doc, target_id } = request_json
-
-    if (!url.includes("articles") && !url.includes("scrap")){
-        return new Response("not implemented", {headers: HEADER_OPS, status: 501})
+    
+    if (url.startsWith("https://zenn.dev")){
+        if (!url.includes("articles") && !url.includes("scrap")){
+            return new Response("not proper URL", {headers: headers, status: 501})
+        }
+    
+        const convertion_result =  (url.includes("articles")) ? await zenn_article_to_blocks(url, html_doc) : await zenn_scrap_to_blocks(url, html_doc)
+        if (convertion_result.ok == false){
+            const { name, message, stack } = convertion_result.data
+            return new Response(JSON.stringify({name, message, stack}), {headers, status:400})
+        }
+    
+        const { ok, data, status } = await call_api(target_id, convertion_result.data)
+        if (ok == false){ console.log(JSON.parse(data)) }
+        return new Response(data, {headers, status})
     }
-
-    const convertion_result =  (url.includes("articles")) ? await article_to_blocks(url, html_doc) : await scrap_to_blocks(url, html_doc)
-    if (convertion_result.ok == false){
-        return new Response(JSON.stringify(convertion_result.data), {headers, status:400})
+    else if (url.startsWith("https://note.com/") && url.includes("/n/")){
+        const convertion_result = await note_article_to_blocks(url, html_doc)
+        if (convertion_result.ok == false){
+            const { name, message, stack } = convertion_result.data
+            return new Response(JSON.stringify({name, message, stack}), {headers, status:400})
+        }
+    
+        const { ok, data, status } = await call_api(target_id, convertion_result.data)
+        if (ok == false){ console.log(JSON.parse(data)) }
+        return new Response(data, {headers, status})
     }
-
-    const { ok, data, status } = await call_api(headers, target_id, convertion_result.data)
-    if (ok == false){ console.log(JSON.parse(data)) }
-    return new Response(data, {headers, status})
+    else {
+        return new Response(`${url} is not proper URL`, {headers: headers, status: 501})
+    }
+    
 }
+
+
+
+function check_origin(
+    headers: Headers,
+    options: Record<string,string>,
+){
+    const origin = headers.get("origin")
+    if (origin == "https://zenn.dev"){
+        return {...options,
+            'Access-Control-Allow-Origin': 'https://zenn.dev'
+        }
+    }
+    else if (origin == "https://note.com"){
+        return {...options,
+            'Access-Control-Allow-Origin': 'https://note.com'
+        }
+    }
+    else {
+        return options
+    }
+}
+
 
 
 serve({
@@ -125,27 +166,31 @@ serve({
 
     "/withid/:target/:method": async (
         request: Request,
-        connInfo: ConnInfo,
-        params: {target: string, method: string}
+        _connInfo: ConnInfo,
+        params: PathParams
     ) => {
+        const headers = check_origin(request.headers, HEADER_OPS)
+        console.log(request.headers.get("origin"))
         if (request.method == "OPTIONS"){
-            return new Response("options", {headers: HEADER_OPS, status: 200})
+            return new Response("options", {headers: headers, status: 200})
+        }
+        if (params === undefined){
+            return new Response("not found", {headers: headers, status: 404})
         }
         const { target, method } = params
-        if (target == "pages"){
-            if (method == "create"){
-                return await data_to_page(request)
-            }
+        if (target == "pages" && method == "create"){
+            return await data_to_page(request)
         } else {
-            return new Response("not implemented", {headers: HEADER_OPS, status: 501})
+            return new Response("not implemented", {headers: headers, status: 501})
         }
     },
 
     404: (request: Request) => {
+        const headers = check_origin(request.headers, HEADER_OPS)
         if (request.method == "OPTIONS"){
-            return new Response("options", {headers: HEADER_OPS, status: 200})
+            return new Response("options", {headers: headers, status: 200})
         }
-        return new Response("not found", {headers: HEADER_OPS, status: 404})
+        return new Response("not found", {headers: headers, status: 404})
     },
 })
 

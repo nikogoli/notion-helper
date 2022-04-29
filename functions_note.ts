@@ -152,7 +152,7 @@ function to_blocks(
                         blocks.push( create_block({ type:"BLOCKQUOTE", firstline, children }) )
                     }
                     else {
-                        errors.push({ msg: "This FIGURE-element is not implemented", type:"not implemented", elem })
+                        errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })
                     }
                     if (capition.children.length > 0){
                         to_blocks(capition).forEach(b => blocks.push(b))
@@ -196,7 +196,7 @@ export async function note_article_to_blocks(
         }
         if (document === null){ throw new Error() }
 
-        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.replaceAll(/\n|\s/g, "")
+        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.replaceAll(/\s/g, "")
         console.log(page_title)
         const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
         const icon: CreatePageBodyParameters["icon"] = (link===null) ? null : { type: "external", external: { url: link} }

@@ -245,10 +245,10 @@ function to_blocks(
 }
 
 
-export async function scrap_to_blocks(
+export async function zenn_scrap_to_blocks(
     url: string,
     html: null | string = null
-): Promise<{ok: true, data: PageData<ScrapInfo>} | {ok: false, data:string}> {
+): Promise<{ok: true, data: PageData<ScrapInfo>} | {ok: false, data:Record<string, unknown>}> {
     try {
         let document: HTMLDocument | null
         if (html !== null){
@@ -367,15 +367,15 @@ export async function scrap_to_blocks(
         return { ok: true, data: body_data }
 
     } catch(e) {
-        return { ok: false, data: JSON.stringify(e) }
+        return { ok: false, data: e }
     }
 }
 
 
-export async function article_to_blocks(
+export async function zenn_article_to_blocks(
     url: string,
     html: null | string = null
-): Promise<{ok: true, data: PageData<null>} | {ok: false, data:string}> {
+): Promise<{ok: true, data: PageData<null>} | {ok: false, data:Record<string, unknown>}> {
     try {
         let document: HTMLDocument | null
         if (html !== null){
@@ -462,28 +462,6 @@ export async function article_to_blocks(
         return { ok: true, data: body_data }
 
     } catch(e) {
-        return { ok: false, data: JSON.stringify(e) }
-    }
-}
-
-
-export async function zenn_to_blocks(
-    url: string
-) {
-    if (!url.includes("articles") && !url.includes("scraps")){
-        throw new Error("invalid input")
-    }
-
-    const result = (url.includes("articles")) ? await article_to_blocks(url) : await scrap_to_blocks(url)
-    
-    if (result.ok){
-        const { title, icon, topblock_ids, max, data  } = result.data
-
-        if (max >= 3) { throw new Error("some nests are too deep") }
-        const children = topblock_ids.map(id => data[id].block)
-        const properties = {title}
-        return { properties, icon, children }
-    } else {
-        throw JSON.parse(result.data)
+        return { ok: false, data: e }
     }
 }

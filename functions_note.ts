@@ -196,7 +196,8 @@ export async function note_article_to_blocks(
         }
         if (document === null){ throw new Error() }
 
-        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText
+        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.trim().trim()
+        console.log(page_title)
         const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
         const icon: CreatePageBodyParameters["icon"] = (link===null) ? null : { type: "external", external: { url: link} }
         const author = document.getElementsByClassName("o-noteContentText__author")[0].innerText.split("\n")[0]
@@ -269,7 +270,6 @@ export async function note_article_to_blocks(
         return { ok: true, data: body_data }
 
     } catch(e) {
-        const { name, message, lineNumber, columnNumber, stack } = e
         return { ok: false, data: e }
     }
 }

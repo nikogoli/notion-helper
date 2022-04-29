@@ -608,223 +608,232 @@ function nest_count(
 export async function scrap_to_blocks(
     url: string,
     html: null | string = null
-): Promise<ZennResponse> {
-    let document: HTMLDocument | null
-    if (html !== null){
-        document = new DOMParser().parseFromString(html, "text/html")
-    } else {
-        const response = await fetch(url, {method: "GET"})
-        const text = await response.text()
-        document = new DOMParser().parseFromString(text, "text/html")
-    }
-    if (document === null){ throw new Error() }
-
-    const page_title = document.getElementsByClassName("View_title__ASFih")[0].innerText
-    const topics = document.getElementsByClassName("TopicList_container__bqtFg")[0].innerText.split("\n")
-    const author = document.getElementsByClassName("SidebarUserBio_name__6kFYE")[0].innerText
-
-    let icon: CreatePageBodyParameters["icon"]
-    const author_img_src = document.getElementsByClassName("SidebarUserBio_container__kwCsb")[0].getElementsByTagName("img")[0].getAttribute("src")
-    if (author_img_src !== null && VALID_IMAGEFILE.includes(author_img_src.split(".").reverse()[0])){
-        icon = { type: "external", external: {url:author_img_src} }
-    } else {
-        icon = { type: "emoji", emoji: "📑" }
-    }
-
-	const scraps: Array<UnitScrap> = []
-
-    Array.from(document.getElementsByClassName("ScrapThread_item__4G_47"))
-    .forEach( (items, th_idx) => {
-        const thread_idx = `${th_idx}`
-        Array.from(items.getElementsByClassName("znc BodyCommentContent_bodyCommentContainer__WXWq0"))
-        .forEach( (scrap_node, sc_idx) =>  {
-            const scrap_idx = `${th_idx}_${sc_idx}`
-            const content = to_blocks(scrap_node)
-            if (scrap_node.parentElement !== null
-                && scrap_node.parentElement.parentElement !== null
-                && scrap_node.parentElement.parentElement.previousElementSibling !== null
-            ){
-                const date_time = scrap_node.parentElement.parentElement.previousElementSibling.getElementsByClassName("ThreadItemContent_date__kLnfZ")[0].getAttribute("dateTime")
-                scraps.push({thread_idx, scrap_idx, date_time, content })
-            } else {
-                scraps.push({thread_idx, scrap_idx, date_time: null, content })
-            }
-        })
-    })
-    
-    const block_info: Record<string, ScrapBlockInfo> = {}
-
-	block_info["blank"] = {
-		self_id: "blank", notion_id: "",
-		thread_idx: "", scrap_idx: "",
-		block: { object: "block", type: "paragraph", paragraph: {rich_text: []} },
-		parent_id: null
-	}
-	block_info["divider"] = {
-		self_id: "divider", notion_id: "",
-		thread_idx: "", scrap_idx: "",
-		block: { object: "block", type: "divider", divider: {} },
-		parent_id: null
-	}
-
-    const refere_id = crypto.randomUUID()
-    block_info[refere_id] = {
-        self_id: refere_id, notion_id: "",
-        thread_idx: "", scrap_idx: "",
-        block: { object: "block", type:"quote", quote: { rich_text: to_richtx("text", "オリジナルの web ページ", url) }},
-        parent_id: null
-    }
-    
-	let topblock_ids: Array<string> = [ refere_id ]
-	let children_ids: Array<string> = []
-	let thread_number = "0"
-	let max = 0
-
-    scraps.forEach((scrap) => {
-        const {thread_idx, scrap_idx} = scrap
-        const block_ids: Array<string> = []
-        scrap.content.forEach((block, idx) => {
-            const count = nest_count(0, block)
-            if (max < count) {
-                max = count
-            }
-            const self_id = crypto.randomUUID()
-            const child_ids = set_record_and_get_childs({count, block, thread_idx, scrap_idx, self_id, dict: block_info, parent_id: null})
-            if (child_ids.length > 0){
-                children_ids = [...children_ids, ...child_ids]
-            }
-            if (block.type == "callout" && block.callout.rich_text[0].type=="text"&& block.callout.rich_text[0].text.content == "注釈"){
-                block_ids.push("blank")
-            }
-            else if (block.type == "heading_3" && scrap.content[idx-1].type != "heading_1" && scrap.content[idx-1].type != "heading_2" ){
-                block_ids.push("blank")
-            }
-            block_ids.push(self_id)
-        })
-        if (thread_idx != thread_number) {
-            topblock_ids = [...topblock_ids, "blank", "divider", "blank", ...block_ids]
-            thread_number = thread_idx
+): Promise<{ok: true, data: ZennResponse} | {ok: false, data:string}> {
+    try {
+        let document: HTMLDocument | null
+        if (html !== null){
+            document = new DOMParser().parseFromString(html, "text/html")
         } else {
-            topblock_ids = [...topblock_ids, "blank", "blank", ...block_ids]
+            const response = await fetch(url, {method: "GET"})
+            const text = await response.text()
+            document = new DOMParser().parseFromString(text, "text/html")
         }
-    })
-    
-    const body_data = {
-		title: to_richtx("text", page_title),
-        author,
-		topics,
-        icon,
-        max,
-		topblock_ids,
-		children_ids,
-		data: block_info
-	}
+        if (document === null){ throw new Error() }
 
-    return body_data
+        const page_title = document.getElementsByClassName("View_title__ASFih")[0].innerText
+        const topics = document.getElementsByClassName("TopicList_container__bqtFg")[0].innerText.split("\n")
+        const author = document.getElementsByClassName("SidebarUserBio_name__6kFYE")[0].innerText
+
+        let icon: CreatePageBodyParameters["icon"]
+        const author_img_src = document.getElementsByClassName("SidebarUserBio_container__kwCsb")[0].getElementsByTagName("img")[0].getAttribute("src")
+        if (author_img_src !== null && VALID_IMAGEFILE.includes(author_img_src.split(".").reverse()[0])){
+            icon = { type: "external", external: {url:author_img_src} }
+        } else {
+            icon = { type: "emoji", emoji: "📑" }
+        }
+
+        const scraps: Array<UnitScrap> = []
+
+        Array.from(document.getElementsByClassName("ScrapThread_item__4G_47"))
+        .forEach( (items, th_idx) => {
+            const thread_idx = `${th_idx}`
+            Array.from(items.getElementsByClassName("znc BodyCommentContent_bodyCommentContainer__WXWq0"))
+            .forEach( (scrap_node, sc_idx) =>  {
+                const scrap_idx = `${th_idx}_${sc_idx}`
+                const content = to_blocks(scrap_node)
+                if (scrap_node.parentElement !== null
+                    && scrap_node.parentElement.parentElement !== null
+                    && scrap_node.parentElement.parentElement.previousElementSibling !== null
+                ){
+                    const date_time = scrap_node.parentElement.parentElement.previousElementSibling.getElementsByClassName("ThreadItemContent_date__kLnfZ")[0].getAttribute("dateTime")
+                    scraps.push({thread_idx, scrap_idx, date_time, content })
+                } else {
+                    scraps.push({thread_idx, scrap_idx, date_time: null, content })
+                }
+            })
+        })
+        
+        const block_info: Record<string, ScrapBlockInfo> = {}
+
+        block_info["blank"] = {
+            self_id: "blank", notion_id: "",
+            thread_idx: "", scrap_idx: "",
+            block: { object: "block", type: "paragraph", paragraph: {rich_text: []} },
+            parent_id: null
+        }
+        block_info["divider"] = {
+            self_id: "divider", notion_id: "",
+            thread_idx: "", scrap_idx: "",
+            block: { object: "block", type: "divider", divider: {} },
+            parent_id: null
+        }
+
+        const refere_id = crypto.randomUUID()
+        block_info[refere_id] = {
+            self_id: refere_id, notion_id: "",
+            thread_idx: "", scrap_idx: "",
+            block: { object: "block", type:"quote", quote: { rich_text: to_richtx("text", "オリジナルの web ページ", url) }},
+            parent_id: null
+        }
+        
+        let topblock_ids: Array<string> = [ refere_id ]
+        let children_ids: Array<string> = []
+        let thread_number = "0"
+        let max = 0
+
+        scraps.forEach((scrap) => {
+            const {thread_idx, scrap_idx} = scrap
+            const block_ids: Array<string> = []
+            scrap.content.forEach((block, idx) => {
+                const count = nest_count(0, block)
+                if (max < count) {
+                    max = count
+                }
+                const self_id = crypto.randomUUID()
+                const child_ids = set_record_and_get_childs({count, block, thread_idx, scrap_idx, self_id, dict: block_info, parent_id: null})
+                if (child_ids.length > 0){
+                    children_ids = [...children_ids, ...child_ids]
+                }
+                if (block.type == "callout" && block.callout.rich_text[0].type=="text"&& block.callout.rich_text[0].text.content == "注釈"){
+                    block_ids.push("blank")
+                }
+                else if (block.type == "heading_3" && scrap.content[idx-1].type != "heading_1" && scrap.content[idx-1].type != "heading_2" ){
+                    block_ids.push("blank")
+                }
+                block_ids.push(self_id)
+            })
+            if (thread_idx != thread_number) {
+                topblock_ids = [...topblock_ids, "blank", "divider", "blank", ...block_ids]
+                thread_number = thread_idx
+            } else {
+                topblock_ids = [...topblock_ids, "blank", "blank", ...block_ids]
+            }
+        })
+        
+        const body_data = {
+            title: to_richtx("text", page_title),
+            author,
+            topics,
+            icon,
+            max,
+            topblock_ids,
+            children_ids,
+            data: block_info
+        }
+
+        return { ok: true, data: body_data }
+
+    } catch(e) {
+        return { ok: false, data: JSON.stringify(e) }
+    }
 }
 
 
 export async function article_to_blocks(
     url: string,
     html: null | string = null
-): Promise<ZennResponse> {
-    let document: HTMLDocument | null
-    if (html !== null){
-        document = new DOMParser().parseFromString(html, "text/html")
-    } else {
-        const response = await fetch(url, {method: "GET"})
-        const text = await response.text()
-        document = new DOMParser().parseFromString(text, "text/html")
+): Promise<{ok: true, data: ZennResponse} | {ok: false, data:string}> {
+    try {
+        let document: HTMLDocument | null
+        if (html !== null){
+            document = new DOMParser().parseFromString(html, "text/html")
+        } else {
+            const response = await fetch(url, {method: "GET"})
+            const text = await response.text()
+            document = new DOMParser().parseFromString(text, "text/html")
+        }
+        if (document === null){ throw new Error() }
+
+        const page_title = document.getElementsByClassName("ArticleHeader_title__ytjQW")[0].innerText
+        const icon: CreatePageBodyParameters["icon"] = { type:"emoji", emoji:document.getElementsByClassName("Emoji_nativeEmoji__JRjFi")[0].innerText as EmojiRequest}
+        const author = document.getElementsByClassName("SidebarUserBio_name__6kFYE")[0].innerText
+        const topics = document.getElementsByClassName("ArticleSidebar_topicLinksContainer__kLlbK")[0].innerText.split("\n")
+        
+
+        const article_body = document.getElementsByClassName("znc BodyContent_anchorToHeadings__Vl0_u")[0]
+        const content = to_blocks(article_body)
+        
+        const block_info: Record<string, BlockInfo> = {}
+
+        block_info["blank"] = {
+            self_id: "blank", notion_id: "",
+            block: { object: "block", type: "paragraph", paragraph: {rich_text: []} },
+            parent_id: null
+        }
+        block_info["divider"] = {
+            self_id: "divider", notion_id: "",
+            block: { object: "block", type: "divider", divider: {} },
+            parent_id: null
+        }
+
+        const refere_id = crypto.randomUUID()
+        block_info[refere_id] = {
+            self_id: refere_id, notion_id: "",
+            block: { object: "block", type:"quote", quote: { rich_text: to_richtx("text", "オリジナルの web ページ", url) }},
+            parent_id: null
+        }
+        
+        
+        const topblock_ids: Array<string> = ["blank", refere_id, "blank", "blank"]
+        let children_ids: Array<string> = [ ]
+        let max = 0
+        
+        content.forEach((block, idx) => {
+            const count = nest_count(0, block)
+            if (max < count) {
+                max = count
+            }
+            const self_id = crypto.randomUUID()
+            const child_ids = set_record_and_get_childs({count, block, self_id, dict: block_info, parent_id: null})
+            if (child_ids.length > 0){
+                children_ids = [...children_ids, ...child_ids]
+            }
+            if (block.type == "callout" && block.callout.rich_text[0].type=="text"&& block.callout.rich_text[0].text.content == "注釈"){
+                topblock_ids.push("blank")
+            }
+            else if (block.type == "heading_3" && content[idx-1].type != "heading_1" && content[idx-1].type != "heading_2" ){
+                topblock_ids.push("blank")
+            }
+            topblock_ids.push(self_id)
+        })
+
+        
+        const body_data = {
+            title: to_richtx("text", page_title),
+            author,
+            topics,
+            icon,
+            max,
+            topblock_ids,
+            children_ids,
+            data: block_info
+        }
+
+        return { ok: true, data: body_data }
+
+    } catch(e) {
+        return { ok: false, data: JSON.stringify(e) }
     }
-    if (document === null){ throw new Error() }
-
-    const page_title = document.getElementsByClassName("ArticleHeader_title__ytjQW")[0].innerText
-    const icon: CreatePageBodyParameters["icon"] = { type:"emoji", emoji:document.getElementsByClassName("Emoji_nativeEmoji__JRjFi")[0].innerText as EmojiRequest}
-    const author = document.getElementsByClassName("SidebarUserBio_name__6kFYE")[0].innerText
-    const topics = document.getElementsByClassName("ArticleSidebar_topicLinksContainer__kLlbK")[0].innerText.split("\n")
-	
-
-    const article_body = document.getElementsByClassName("znc BodyContent_anchorToHeadings__Vl0_u")[0]
-    const content = to_blocks(article_body)
-    
-    const block_info: Record<string, BlockInfo> = {}
-
-	block_info["blank"] = {
-		self_id: "blank", notion_id: "",
-		block: { object: "block", type: "paragraph", paragraph: {rich_text: []} },
-		parent_id: null
-	}
-	block_info["divider"] = {
-		self_id: "divider", notion_id: "",
-		block: { object: "block", type: "divider", divider: {} },
-		parent_id: null
-	}
-
-    const refere_id = crypto.randomUUID()
-    block_info[refere_id] = {
-        self_id: refere_id, notion_id: "",
-        block: { object: "block", type:"quote", quote: { rich_text: to_richtx("text", "オリジナルの web ページ", url) }},
-        parent_id: null
-    }
-    
-    
-    const topblock_ids: Array<string> = ["blank", refere_id, "blank", "blank"]
-	let children_ids: Array<string> = [ ]
-	let max = 0
-    
-    content.forEach((block, idx) => {
-        const count = nest_count(0, block)
-        if (max < count) {
-            max = count
-        }
-        const self_id = crypto.randomUUID()
-        const child_ids = set_record_and_get_childs({count, block, self_id, dict: block_info, parent_id: null})
-        if (child_ids.length > 0){
-            children_ids = [...children_ids, ...child_ids]
-        }
-        if (block.type == "callout" && block.callout.rich_text[0].type=="text"&& block.callout.rich_text[0].text.content == "注釈"){
-            topblock_ids.push("blank")
-        }
-        else if (block.type == "heading_3" && content[idx-1].type != "heading_1" && content[idx-1].type != "heading_2" ){
-            topblock_ids.push("blank")
-        }
-        topblock_ids.push(self_id)
-    })
-
-    
-    const body_data = {
-		title: to_richtx("text", page_title),
-        author,
-        topics,
-		icon,
-        max,
-		topblock_ids,
-		children_ids,
-		data: block_info
-	}
-
-    return body_data
 }
 
 
 export async function zenn_to_blocks(
     url: string
 ) {
-    if (url.includes("articles")){
-        const { title, icon, topblock_ids, max, data  } = await article_to_blocks(url)
-        if (max >= 3) { throw new Error("some nests are too deep") }
-        const children = topblock_ids.map(id => data[id].block)
-        const properties = {title}
-        return { properties, icon, children }
-    }
-    else if (url.includes("scraps")){
-        const { title, icon, topblock_ids, max, data } = await scrap_to_blocks(url)
-        if (max >= 3) { throw new Error("some nests are too deep") }
-        const children = topblock_ids.map(id => data[id].block)
-        const properties = {title}
-        return { properties, icon, children }
-    }
-    else {
+    if (!url.includes("articles") && !url.includes("scraps")){
         throw new Error("invalid input")
+    }
+
+    const result = (url.includes("articles")) ? await article_to_blocks(url) : await scrap_to_blocks(url)
+    
+    if (result.ok){
+        const { title, icon, topblock_ids, max, data  } = result.data
+        
+        if (max >= 3) { throw new Error("some nests are too deep") }
+        const children = topblock_ids.map(id => data[id].block)
+        const properties = {title}
+        return { properties, icon, children }
+    } else {
+        throw JSON.parse(result.data)
     }
 }

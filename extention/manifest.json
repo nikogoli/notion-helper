@@ -1,0 +1,20 @@
+{
+  "name": "test",
+  "description": "test",
+  "version": "0.0.0",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "test"
+  },
+  "permissions": ["activeTab", "scripting"],
+  "web_accessible_resources": [
+    {
+      "resources": [ ".env" ],
+      "matches": [ "https://zenn.dev/*" ]
+    }
+  ]
+}

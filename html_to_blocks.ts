@@ -163,7 +163,7 @@ function embed_to_block (
 
     switch (embed_type){
         case "zenn-embedded-link-card":
-        case "zenn-embedded zenn-embedded-github":
+        case "zenn-embedded-github":
             return { type: "block", block: create_block({ type: "BOOKMARK", link}) }
         case "zenn-embedded-tweet":
             return { type: "block", block: { type:"embed", embed:{ url: link } }}

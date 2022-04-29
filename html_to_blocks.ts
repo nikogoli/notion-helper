@@ -175,7 +175,6 @@ function embed_to_block (
 }
 
 
-
 function to_blocks(
     element: Element,
     texts: Array<RichTextItemRequest> = []
@@ -232,6 +231,9 @@ function to_blocks(
             if (elem.nodeName == "P"){
                 if (elem.childNodes.length > 0){
                     to_blocks(elem).forEach( tk => blocks.push(tk) )
+                    if (elem.nextElementSibling !== null && elem.nextElementSibling.nodeName == "P"){
+                        blocks.push({ type:"paragraph", paragraph:{ rich_text: [] } })
+                    }
                 }
             }
             else if (elem.nodeName == "BR"){
@@ -828,7 +830,7 @@ export async function zenn_to_blocks(
     
     if (result.ok){
         const { title, icon, topblock_ids, max, data  } = result.data
-        
+
         if (max >= 3) { throw new Error("some nests are too deep") }
         const children = topblock_ids.map(id => data[id].block)
         const properties = {title}

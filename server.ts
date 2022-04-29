@@ -13,14 +13,20 @@ await serve(handler);
 
 import { serve } from "https://deno.land/x/sift@0.5.0/mod.ts";
 import { ConnInfo } from "https://deno.land/std/http/server.ts";
-import {
-    Client,
-} from "https://deno.land/x/notion_sdk/src/mod.ts"
 
+import { Client} from "https://deno.land/x/notion_sdk/src/mod.ts"
 import {
-    BlockObjectRequest,    
+    BlockObjectRequest,
+    CreatePageBodyParameters,
     RichTextItemRequest,
 } from "https://deno.land/x/notion_sdk/src/api-endpoints.ts"
+
+import { 
+    article_to_blocks,
+    scrap_to_blocks,
+    ZennResponse,
+ } from "https://pax.deno.dev/nikogoli/notion-helper/mod.ts"
+
 
 type BlockInfo = {
     self_id: string,
@@ -32,13 +38,16 @@ type BlockInfo = {
 }
 
 
+type BlocksFromZenn = {
+    properties: { title: Required<RichTextItemRequest>[] },
+    icon: CreatePageBodyParameters["icon"],
+    children: BlockObjectRequest[];
+}
+
+
 type RequestJson = {
+    html_doc: string,
     target_id: string,
-    title: string,
-    topics: Array<string>,
-    topblock_ids: Array<string>,
-    children_ids: Array<string>,
-    data: Record<string, BlockInfo>
 }
 
 
@@ -47,35 +56,6 @@ const HEADER_OPS = {
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Headers': 'Content-Type, Origin, Authorization',
     'Access-Control-Allow-Origin': 'https://zenn.dev',
-}
-
-
-function to_richtx(
-    type: "text" | "equation",
-    text: string,
-    link = ""
-) {
-	if (type == "equation") {
-		return [{
-			type: "equation",
-			equation: {"expression": text},
-			annotations: {
-				bold: false, italic: false, strikethrough: false,
-				underline: false, code: false, color: "default"
-			}
-		}]
-	} else if (type == "text") {
-		return [{
-			type: "text",
-			text: { content: text, link: link == "" ? null : {url: link} },
-			annotations: {
-				bold: false, italic: false, strikethrough: false,
-				underline: false, code: false, color: "default"
-			}
-		}]
-	} else {
-		throw new Error("invalid type")
-	}
 }
 
 
@@ -94,22 +74,26 @@ async function data_to_page(
     }
 	
 	const request_json: RequestJson = await request.json()
-  	const { target_id, title, topics, topblock_ids, children_ids, data } = request_json
+  	const { html_doc, target_id } = request_json
 
-  	const page_title = to_richtx("text", title) as Array<Extract<RichTextItemRequest, {type?:"text"}>>
-  	const blocks:Array<BlockObjectRequest> = []
-	const notion = new Client({auth: Deno.env.get("NOTION_TOKEN")})
+    const orig_url = request.headers.get("origin")
+    if (orig_url === null || !orig_url.includes("articles") || !orig_url.includes("scrap")){
+        throw new Error(JSON.stringify(request.headers))
+    }
 
-    topblock_ids.forEach(id => {
-        if (id in data){
-            blocks.push(data[id].block)
-        }
-    })
+    const { title, author, topics, icon, max, topblock_ids, children_ids, data } = (orig_url.includes("articles"))
+        ? await article_to_blocks(orig_url, html_doc)
+        : await scrap_to_blocks(orig_url, html_doc)
 
+    const children = topblock_ids.map(id => data[id].block)
+    const properties = {title}
+
+    const notion = new Client({auth: Deno.env.get("NOTION_TOKEN")})
     const notion_response = await notion.pages.create({
         parent: {page_id: target_id},
-        properties: {title: page_title},
-        children: blocks,
+        properties: properties,
+        icon: icon,
+        children: children,
     })
     .catch((e) =>{
         return new Response(JSON.stringify(e), {headers, status:400})
@@ -162,13 +146,13 @@ async function handle_rooted_req(
             return await data_to_page(request)
         }
     } else {
-        return new Response("Requested function is not implemented", {headers: HEADER_OPS, status: 501})
+        return new Response("not implemented", {headers: HEADER_OPS, status: 501})
     }
 }
 
 
 serve({
-    "/": (request: Request) => {
+    "/": (_request: Request) => {
         return new Response("Hellow", {headers: HEADER_OPS, status: 200})
     },
 
@@ -182,6 +166,6 @@ serve({
         if (request.method == "OPTIONS"){
             return new Response("options", {headers: HEADER_OPS, status: 200})
         }
-        return new Response("requested URL is not found", {headers: HEADER_OPS, status: 404})
+        return new Response("not found", {headers: HEADER_OPS, status: 404})
     },
 })

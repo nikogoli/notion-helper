@@ -72,11 +72,23 @@ type ScrapBlockInfo = {
 }
 
 
-type BlockInfo = {
+export type BlockInfo = {
     self_id: string,
     notion_id: string,
     block: BlockObjectRequest,
     parent_id: null | string,
+}
+
+
+export type ZennResponse = {
+    title: Required<RichTextItemRequest>[],
+    author: string,
+    topics: string[],
+    icon: CreatePageBodyParameters["icon"],
+    max: number,
+    topblock_ids: string[],
+    children_ids: string[],
+    data: Record<string, BlockInfo>,
 }
 
 
@@ -568,7 +580,7 @@ function nest_count(
 export async function scrap_to_blocks(
     url: string,
     html: null | string = null
-){
+): Promise<ZennResponse> {
     let document: HTMLDocument | null
     if (html !== null){
         document = new DOMParser().parseFromString(html, "text/html")
@@ -687,7 +699,7 @@ export async function scrap_to_blocks(
 export async function article_to_blocks(
     url: string,
     html: null | string = null
-){
+): Promise<ZennResponse> {
     let document: HTMLDocument | null
     if (html !== null){
         document = new DOMParser().parseFromString(html, "text/html")
@@ -701,7 +713,7 @@ export async function article_to_blocks(
     const page_title = document.getElementsByClassName("ArticleHeader_title__ytjQW")[0].innerText
     const icon: CreatePageBodyParameters["icon"] = { type:"emoji", emoji:document.getElementsByClassName("Emoji_nativeEmoji__JRjFi")[0].innerText as EmojiRequest}
     const author = document.getElementsByClassName("SidebarUserBio_name__6kFYE")[0].innerText
-    const datetime = document.getElementsByTagName("time")[0].attributes["datetime"]
+    const topics = document.getElementsByClassName("ArticleSidebar_topicLinksContainer__kLlbK")[0].innerText.split("\n")
 	
 
     const article_body = document.getElementsByClassName("znc BodyContent_anchorToHeadings__Vl0_u")[0]
@@ -755,8 +767,8 @@ export async function article_to_blocks(
     const body_data = {
 		title: to_richtx("text", page_title),
         author,
+        topics,
 		icon,
-        datetime,
         max,
 		topblock_ids,
 		children_ids,

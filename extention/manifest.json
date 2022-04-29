@@ -14,7 +14,7 @@
   "web_accessible_resources": [
     {
       "resources": [ ".env" ],
-      "matches": [ "https://zenn.dev/*" ]
+      "matches": [ "https://zenn.dev/*", "https://note.com/*" ]
     }
   ]
 }

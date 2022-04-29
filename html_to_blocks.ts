@@ -140,6 +140,42 @@ function plaintx_to_richtx(
 }
 
 
+function embed_to_block (
+    elem: Element
+): {type: "block", block: BlockObjectRequest} | {type: "error", error:TokenizeError}  {
+    const [ _zenn, embed_type ] = elem.classList
+    let name = ""
+    const default_block: Extract<BlockObjectRequest, {type?:"callout"}> = { type:"callout", callout: { color: "default", rich_text: to_richtx("text", `埋め込み要素 ${name} (取得不可能) `) }}
+
+    if (embed_type === undefined){        
+        return { type: "block", block: default_block }
+    }
+
+    const a_elem = elem.nextElementSibling
+    if (a_elem === null){
+        return { type: "error", error: { msg: "failed to get corresponding A-element", type:"unexpected node-tree", elem } }
+    }
+
+    const link = a_elem.getAttribute("href")
+    if (link === null){
+        return { type:"error", error: { msg: "A-element does not have 'href'", type:"attribute missing", elem: a_elem } }
+    }
+
+    switch (embed_type){
+        case "zenn-embedded-link-card":
+        case "zenn-embedded zenn-embedded-github":
+            return { type: "block", block: create_block({ type: "BOOKMARK", link}) }
+        case "zenn-embedded-tweet":
+            return { type: "block", block: { type:"embed", embed:{ url: link } }}
+        default:{
+            name = embed_type.split("-").reverse()[0]
+            return { type: "block", block: default_block }
+        }
+    } 
+}
+
+
+
 function to_blocks(
     element: Element,
     texts: Array<RichTextItemRequest> = []
@@ -275,29 +311,21 @@ function to_blocks(
                 blocks.push( create_block({ type:"DETAILS", firstline, children }) )
             }
             else if (elem.nodeName == "DIV"){
-                if ( elem.className == "code-block-container" ) {
+                const [base_class, ..._others] = elem.classList
+                if ( base_class == "code-block-container" ) {
                     const code_node = elem.getElementsByTagName("code")[0]
                     const language = (code_node.className!="") ? code_node.className.split("-").reverse()[0] : "plain text"
                     blocks.push( create_block({ type:"CODE", language, text:code_node.innerText.slice(0, -1) }) )
                 }
-                else if (["zenn-embedded zenn-embedded-link-card", "zenn-embedded zenn-embedded-github"].includes(elem.className)){
-                    const a_elem = elem.nextElementSibling
-                    if (a_elem !== null){
-                        const link = a_elem.getAttribute("href")
-                        if (link !== null){
-                            blocks.push( create_block({ type: "BOOKMARK", link}) )
-                        } else {
-                            errors.push( { msg: "A-element does not have 'href'", type:"attribute missing", elem: a_elem })
-                        }
+                else if ( base_class == "zenn-embedded"){
+                    const result = embed_to_block(elem)
+                    if (result.type == "block"){
+                        blocks.push(result.block)
                     } else {
-                        errors.push( { msg: "failed to get corresponding A-element", type:"unexpected node-tree", elem })
+                        errors.push(result.error)
                     }
-                }
-                else if ( elem.className.startsWith("zenn-embedded")){
-                    const name = elem.className.split("-").reverse()[0]
-                    blocks.push( { type:"callout", callout: { color: "default", rich_text: to_richtx("text", `埋め込み要素 ${name} (取得不可能) `) } } )
                 }            
-                else if ( elem.className.startsWith("embed-") ){
+                else if ( base_class.startsWith("embed-") ){
                     const iframe = elem.children[0]
                     const link = iframe.getAttribute("src")
                     if (link !== null){

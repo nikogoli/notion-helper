@@ -13,11 +13,8 @@ async function arrange_scrap() {
 	headers.append("Access-Control-Request-Method", "POST")
 
 
-	const page_url = document.head.getElementsByTagName("link")[0].getAttribute("href")
-	if (url === null) { throw new Error() }
-
 	const body_data = {
-		url: page_url,
+		url: window.location.href,
 		html_doc: document.body.outerHTML,
 		target_id: TARGET_ID
 	}
@@ -56,7 +53,7 @@ async function arrange_scrap() {
 				} else {
 					console.error(responseJson)
 				}
-			} catch(e){
+			} catch(_e){
 				console.error(responseText)
 			}
 		}
@@ -70,6 +67,7 @@ async function arrange_scrap() {
 			console.log(JSON.parse(logs))
 		}
 		else {
+			window.alert("Faild. Please check console-message")
 			console.error(responseText)
 		}
 	}

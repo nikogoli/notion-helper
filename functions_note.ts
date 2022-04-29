@@ -196,7 +196,7 @@ export async function note_article_to_blocks(
         }
         if (document === null){ throw new Error() }
 
-        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.trim().trim()
+        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.replaceAll(/\n|\s/g, "")
         console.log(page_title)
         const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
         const icon: CreatePageBodyParameters["icon"] = (link===null) ? null : { type: "external", external: { url: link} }

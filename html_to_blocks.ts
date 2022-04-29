@@ -10,6 +10,7 @@ import {
 
 import {
     DOMParser,
+    HTMLDocument,
     Element,
     Node,
 } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts"
@@ -566,11 +567,16 @@ function nest_count(
 
 export async function scrap_to_blocks(
     url: string,
+    html: null | string = null
 ){
-    const response = await fetch(url, {method: "GET"})
-    const text = await response.text()
-    const document = new DOMParser().parseFromString(text, "text/html")
-
+    let document: HTMLDocument | null
+    if (html !== null){
+        document = new DOMParser().parseFromString(html, "text/html")
+    } else {
+        const response = await fetch(url, {method: "GET"})
+        const text = await response.text()
+        document = new DOMParser().parseFromString(text, "text/html")
+    }
     if (document === null){ throw new Error() }
 
     const page_title = document.getElementsByClassName("View_title__ASFih")[0].innerText
@@ -680,11 +686,16 @@ export async function scrap_to_blocks(
 
 export async function article_to_blocks(
     url: string,
+    html: null | string = null
 ){
-    const response = await fetch(url, {method: "GET"})
-    const text = await response.text()
-    const document = new DOMParser().parseFromString(text, "text/html")
-
+    let document: HTMLDocument | null
+    if (html !== null){
+        document = new DOMParser().parseFromString(html, "text/html")
+    } else {
+        const response = await fetch(url, {method: "GET"})
+        const text = await response.text()
+        document = new DOMParser().parseFromString(text, "text/html")
+    }
     if (document === null){ throw new Error() }
 
     const page_title = document.getElementsByClassName("ArticleHeader_title__ytjQW")[0].innerText

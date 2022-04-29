@@ -138,9 +138,9 @@ function to_blocks(
                 } else {
                     const [ inner_ele, capition ] = elem.children
                     if (inner_ele.nodeName == "A"){
-                        const link = elem.getAttribute("href")
+                        const link = inner_ele.getAttribute("href")
                         if (link === null){
-                            errors.push({ msg: "A-element does not have 'href'", type:"attribute missing", elem})
+                            errors.push({ msg: "A-element does not have 'href'", type:"attribute missing", elem:inner_ele})
                         }
                         else {
                             blocks.push(create_block({ type:"IMG", link }))

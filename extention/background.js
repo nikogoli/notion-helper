@@ -8,10 +8,6 @@ async function arrange_scrap() {
 
 	const headers = new Headers()
 	headers.append("Authorization", `Bearer ${USER_TOKEN}`)
-	headers.append("Access-Control-Request-Headers", "Content-Type, Origin, Authorization")	
-	headers.append('Content-Type', 'application/json')
-	headers.append("Access-Control-Request-Method", "POST")
-
 
 	const body_data = {
 		url: window.location.href,

@@ -15,7 +15,6 @@ import {
 import {
     BlockInfo,
     ToBlockInput,
-    TEX_TAGS,
     VALID_IMAGEFILE,
     VALID_LANGNAME,
 } from "./mod.ts"
@@ -44,14 +43,14 @@ export function plaintx_to_richtx(
     base_node: Node | Element
 ): Array<Required<RichTextItemRequest>>{
     const annotations: Array<string> = []
-    let link: undefined | string = undefined
+    let link = ""
     let tag = "start"
 
     let base = base_node
     while( tag != "end" ){
         const par = base.parentElement
         if (par !== null && ["A", "SUP", "CODE", "STRONG", "EM", "S"].includes(par.nodeName) ){
-            if (par.nodeName == "A"){ link = par.getAttribute("href") ?? undefined }
+            if (par.nodeName == "A"){ link = par.getAttribute("href") ?? "" }
             annotations.push(par.nodeName)
             tag = par.nodeName
             base = par
@@ -60,16 +59,21 @@ export function plaintx_to_richtx(
         }
     }
 
-    if (TEX_TAGS.includes(base_node.nodeName)){
-        const input = (base_node.nodeName == "EMBED_KATEX")
-            ? (base_node as Element).innerText.split("\n")[0]
-            : (base_node as Element).innerHTML
+    switch (base_node.nodeName){
+        case "EMBED-KATEX": {
+            const input = (base_node as Element).innerText.split("\n")[0]
+            const text = to_richtx( "equation", input, link )
+            return set_annos(text, annotations)
+        }
+        case "NWC-FORMULA": {
+            const input = (base_node as Element).innerHTML
             const text = to_richtx( "equation", input, link )
             return set_annos(text, annotations) 
-    }
-    else {
-        const text = to_richtx( "text", base_node.textContent.trim(), link)
-        return set_annos(text, annotations)
+        }
+        default: {
+            const text = to_richtx( "text", base_node.textContent.trim(), link)
+            return set_annos(text, annotations)
+        }
     }
 }
 
@@ -80,7 +84,7 @@ export function to_richtx(
     link = "",
 ): Array<Required<RichTextItemRequest>> {
     if (text.length > 2000){
-        text = text.slice(0,2000)
+        text = text.slice(0,1985) + "... (too long)"
         console.warn("Text is too long, thus, the words over 2000 are omitted.")
     }
     if (type=="equation") {
@@ -254,6 +258,7 @@ export function set_record_and_get_childs<T>(
         || !["callout", "quote", "toggle", "bulleted_list_item", "numbered_list_item"].includes(block.type)) {
         return []
     }
+    
     let children: Array<BlockObjectRequest>
     if (block.type == "callout" && block.callout.children !== undefined) {
         children = block.callout.children

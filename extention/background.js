@@ -26,25 +26,26 @@ async function arrange_scrap() {
 	const responseText = await page_response.text()
 
 	switch(page_response.status){
-		case "200": {
+		case 200: {
 			const responseJson = JSON.parse(responseText)
-			const { object, id } = responseJson
-			const test = `create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!`
+			console.log(responseJson)
+			const { object, url } = responseJson
+			const test = `create '${object}'.\nCheck "${url}"!!`
 			window.alert(test)
 			console.log(test)
 			console.log(responseJson)
 			return
 		}
-		case "201": {
+		case 201: {
 			const responseJson = JSON.parse(responseText)
-			const { object, id, message } = responseJson
-			const test = `create '${object}', though ${message}.\n\nCheck "https://notion.so/${id.replaceAll("-","")}"`
+			const { object, url, message } = responseJson
+			const test = `create '${object}', though ${message}.\n\nCheck "${url}"`
 			window.alert(test)
 			console.log(test)
 			console.log(responseJson)
 			return
 		}
-		case "400":{
+		case 400:{
 			await JSON.parse(responseText)
 			.then( json => {
 				if ("stack" in json){
@@ -64,21 +65,23 @@ async function arrange_scrap() {
 			})
 			return
 		}
-		case "401": {
+		case 401: {
 			window.alert("Request refused. Please check wheather USER-TOKEN is valid.")
 			console.log(page_response)
 			return
 		}
-		case "404": {
+		case 404: {
 			window.alert("Requested URL is not found.")
 			console.log(page_response)
 			return
 		}
-		case "501":{
+		case 501:{
 			window.alert("Requested URL is not proper one.")
 			console.log(page_response)
 			return
 		}
+		default:
+			console.log(`status: ${page_response.status}`)
 	}
 }
 

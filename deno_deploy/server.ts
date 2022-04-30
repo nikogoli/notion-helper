@@ -62,7 +62,7 @@ async function call_api<T>(
     })
 
 
-    if (children_ids.length == 0){
+    if (children_ids.length == 0 || max >= 4){
         return { ok: true, data: JSON.stringify(notion_response), status: 200 }
     }
     if (new_page_id === null){

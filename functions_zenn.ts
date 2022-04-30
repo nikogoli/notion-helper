@@ -337,10 +337,13 @@ export async function zenn_scrap_to_blocks(
                 if (child_ids.length > 0){
                     children_ids = [...children_ids, ...child_ids]
                 }
-                if (block.type == "callout" && block.callout.rich_text[0].type=="text"&& block.callout.rich_text[0].text.content == "注釈"){
-                    block_ids.push("blank")
+                if (block.type == "callout"){
+                    const texts = block.callout.rich_text
+                    if (texts.length > 0 && texts[0].type=="text"&& texts[0].text.content == "注釈"){
+                        block_ids.push("blank")
+                    }
                 }
-                else if (block.type == "heading_3" && scrap.content[idx-1].type != "heading_1" && scrap.content[idx-1].type != "heading_2" ){
+                else if (block.type == "heading_3" && scrap.content[idx-1] && scrap.content[idx-1].type != "heading_1" && scrap.content[idx-1].type != "heading_2" ){
                     block_ids.push("blank")
                 }
                 block_ids.push(self_id)

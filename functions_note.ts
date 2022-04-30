@@ -95,7 +95,7 @@ function to_blocks(
                 }
             }
             else if (elem.nodeName == "BR"){
-                if (elem.nextElementSibling?.nodeName == "BR"){
+                if (elem.nextSibling?.nodeName == "BR"){
                     blocks.push( create_block({ type: "BR"}) )
                 }
             }

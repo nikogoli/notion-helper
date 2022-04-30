@@ -55,7 +55,7 @@ async function arrange_scrap() {
 				console.error(responseText)
 			}
 		}
-		else if (page_response.status == "600"){
+		else if (page_response.status == "409"){
 			const responseJson = JSON.parse(responseText)
 			const { object, id, logs } = responseJson
 			const ids = [...Object.keys(JSON.parse(logs))].join("\n")

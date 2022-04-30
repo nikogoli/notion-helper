@@ -133,7 +133,12 @@ function to_blocks(
                         blocks.push( { type:"embed", embed:{ url: link} } )
                     }
                     else if (cont_type == "spotify"){
-                        blocks.push( { type:"audio", audio: { external: {url: link }} } )
+                        const audiolink = elem.getElementsByTagName("iframe")[0].getAttribute("src")
+                        if (audiolink !== null){
+                            blocks.push( { type:"audio", audio: { external: {url: audiolink }} } )
+                        } else {
+                            errors.push({ msg: "failed to get audio link", type:"not implemented", elem: elem.getElementsByTagName("iframe")[0] })    
+                        }
                     }
                     else {
                         errors.push({ msg: "This FIGURE-element is not implemented", type:"not implemented", elem })

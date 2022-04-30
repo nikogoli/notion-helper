@@ -122,9 +122,19 @@ function to_blocks(
             else if (elem.nodeName == "FIGURE"){
                 const cont_type = elem.getAttribute("embedded-service")
                 if (cont_type !== null){
-                    const link = elem.getAttribute("data-src")
+                    let link: string | null
+                    if (elem.getAttribute("data-src") !== null){
+                        link = elem.getAttribute("data-src")
+                    }
+                    else if (elem.getElementsByTagName("iframe")[0].getAttribute("src") !== null) {
+                        link = elem.getElementsByTagName("iframe")[0].getAttribute("src")
+                    }
+                    else {
+                        link = elem.getElementsByTagName("iframe")[0].getAttribute("data-src")
+                    }
+
                     if (link === null){
-                        errors.push({ msg: "FIGURE-element does not have 'data-src'", type:"attribute missing", elem})
+                        errors.push({ msg: "FIGURE-element does not have 'data-src'/'src'", type:"attribute missing", elem})
                     }
                     else if (cont_type == "note" || cont_type == "youtube"){
                         blocks.push( create_block({ type: "BOOKMARK", link}) )
@@ -140,8 +150,16 @@ function to_blocks(
                             errors.push({ msg: "failed to get audio link", type:"not implemented", elem: elem.getElementsByTagName("iframe")[0] })    
                         }
                     }
+                    else if (cont_type == "iframely"){
+                        const somelink = elem.getElementsByTagName("iframe")[0].getAttribute("src")
+                        if (somelink !== null){
+                            blocks.push( { type:"embed", embed: { url: somelink} } )
+                        } else {
+                            errors.push({ msg: "failed to get iframely link", type:"not implemented", elem: elem.getElementsByTagName("iframe")[0] })    
+                        }
+                    }
                     else {
-                        errors.push({ msg: "This FIGURE-element is not implemented", type:"not implemented", elem })
+                        errors.push({ msg: "This with-type FIGURE-element is not implemented", type:"not implemented", elem })
                     }
                 } else {
                     const [ inner_ele, capition ] = elem.children
@@ -175,7 +193,9 @@ function to_blocks(
                         }
                     }
                     else {
-                        errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })
+                        if (inner_ele.outerHTML.startsWith('<img src="data:image/svg+') == false){
+                            errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })
+                        }
                     }
                 }
             }
@@ -195,7 +215,7 @@ function to_blocks(
             console.log({ msg: er.msg, elem: er.elem.outerHTML })
             return (bool) ? bool : er.type != "not implemented"
         }, false)
-        //if (is_throw){ throw new Error("Some error in block making") }
+        if (is_throw){ throw new Error("Some error in block making") }
     }
     return blocks
 }

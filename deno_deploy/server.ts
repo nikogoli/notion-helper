@@ -120,7 +120,7 @@ async function call_api<T>(
     }, Promise.resolve())
 
     if ([...Object.keys(failed_logs)].length > 0){
-        return { ok: false, data: JSON.stringify({...notion_response, logs:failed_logs}), status: 600}
+        return { ok: false, data: JSON.stringify({...notion_response, logs:failed_logs}), status: 409}
     } else {
         return { ok: true, data: JSON.stringify(notion_response), status: 200}
     }

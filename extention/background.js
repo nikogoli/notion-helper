@@ -47,9 +47,11 @@ async function arrange_scrap() {
 					window.alert(`creation failed\nname: ${name}\ncode: ${code}\nstatus: ${status}\n${message.slice(0,200)}...`)
 					console.error({ name, status, code, message })
 				} else {
+					window.alert("Faild. Please check console-message")
 					console.error(responseJson)
 				}
 			} catch(_e){
+				window.alert("Faild. Please check console-message")
 				console.error(responseText)
 			}
 		}

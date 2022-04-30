@@ -236,9 +236,18 @@ export async function note_article_to_blocks(
         }
         if (document === null){ throw new Error() }
 
-        const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.replaceAll(/\s/g, "")
-        const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
-        const icon: CreatePageBodyParameters["icon"] = (link===null) ? null : { type: "external", external: { url: link} }
+        const page_title = document.getElementsByTagName("h1")[1].innerText.replaceAll(/\s/g, "")
+
+        let icon: CreatePageBodyParameters["icon"] = null
+        if (document.getElementsByClassName("o-noteEyecatch")[0] !== undefined){
+            const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
+            icon = (link===null) ? null : { type: "external", external: { url: link} }
+        }
+
+        if (document.getElementsByClassName("note-common-styles__textnote-body")[0] === undefined){
+            throw new Error("This note page is out-of-service")
+        }
+
         const author = document.getElementsByClassName("o-noteContentText__author")[0].innerText.split("\n")[0]
         const topics = document.getElementsByClassName("m-tagList__body")[0].innerText.replaceAll("#", "").split("\n")
         

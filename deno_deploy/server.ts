@@ -45,7 +45,8 @@ async function call_api<T>(
     const properties = {title}
 
     const notion = new Client({auth: Deno.env.get("NOTION_TOKEN")})
-    let new_page_id: null | string = null
+    let new_page_id = ""
+    let response_text = ""
     const notion_response = await notion.pages.create({
         parent: {page_id: target_id},
         properties: properties,
@@ -53,9 +54,8 @@ async function call_api<T>(
         children: children,
     })
     .then( res => {
-        if ("parent" in res && res.parent.type == "page_id"){
-            new_page_id = res.parent.page_id
-        }
+        new_page_id = res.id
+        response_text = JSON.stringify(res)
     })
     .catch((e) =>{
         return { ok: false, data: JSON.stringify(e), status: 400 }
@@ -63,10 +63,7 @@ async function call_api<T>(
 
 
     if (children_ids.length == 0 || max >= 4){
-        return { ok: true, data: JSON.stringify(notion_response), status: 200 }
-    }
-    if (new_page_id === null){
-        return { ok: false, data: JSON.stringify({messag: "fail to get created-page-id"}), status: 400 }
+        return { ok: true, data: response_text, status: 200 }
     }
 
     let count = 0
@@ -120,9 +117,10 @@ async function call_api<T>(
     }, Promise.resolve())
 
     if ([...Object.keys(failed_logs)].length > 0){
-        return { ok: false, data: JSON.stringify({...notion_response, logs:failed_logs}), status: 409}
+        const newobj = JSON.parse(response_text)
+        return { ok: false, data: JSON.stringify({...newobj, logs:failed_logs}), status: 409}
     } else {
-        return { ok: true, data: JSON.stringify(notion_response), status: 200}
+        return { ok: true, data: response_text, status: 200}
     }
 }
 

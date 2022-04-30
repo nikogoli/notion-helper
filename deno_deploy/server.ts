@@ -4,6 +4,7 @@ import { ConnInfo } from "https://deno.land/std/http/server.ts";
 import { Client} from "https://deno.land/x/notion_sdk/src/mod.ts"
 import {
     BlockObjectRequest,
+    ListBlockChildrenResponse,
 } from "https://deno.land/x/notion_sdk/src/api-endpoints.ts"
 
 import { 
@@ -19,6 +20,12 @@ type RequestJson = {
     url: string,
     html_doc: string,
     target_id: string,
+}
+
+
+type BlockError = {
+    block: BlockObjectRequest,
+    message: string,
 }
 
 
@@ -38,34 +45,72 @@ async function call_api<T>(
     const properties = {title}
 
     const notion = new Client({auth: Deno.env.get("NOTION_TOKEN")})
+    let new_page_id: null | string = null
     const notion_response = await notion.pages.create({
         parent: {page_id: target_id},
         properties: properties,
         icon: icon,
         children: children,
     })
+    .then( res => {
+        if ("parent" in res && res.parent.type == "page_id"){
+            new_page_id = res.parent.page_id
+        }
+    })
     .catch((e) =>{
         return { ok: false, data: JSON.stringify(e), status: 400 }
     })
 
+
     if (children_ids.length == 0){
         return { ok: true, data: JSON.stringify(notion_response), status: 200 }
     }
+    if (new_page_id === null){
+        return { ok: false, data: JSON.stringify({messag: "fail to get created-page-id"}), status: 400 }
+    }
 
-    const id_and_childs = children_ids.reduce( (dict, id) =>{
-        const { block, parent_id } = data[id]
-        if (parent_id !== null){
-            if (parent_id in dict){
-                dict[parent_id].push(block)
-            } else {
-                dict[parent_id] = [block]
-            }
+    let count = 0
+    const response = await notion.blocks.children.list({ block_id: new_page_id })
+    response.results.forEach( (notion_block, idx) => {
+        const id = topblock_ids[idx+100*count]
+        if (id in data){ data[id].notion_id = notion_block.id }
+    })
+    let has_more = response.has_more
+    let next_cursor = response.next_cursor
+    while(has_more && next_cursor){
+        count += 1
+        await notion.blocks.children.list({ block_id: new_page_id, start_cursor: next_cursor })
+        .then( response => {
+            response.results.forEach( (notion_block, idx) => {
+                const id = topblock_ids[idx+100*count]
+                if (id in data){ data[id].notion_id = notion_block.id }
+            })
+            has_more = response.has_more
+            next_cursor = response.next_cursor
+        })
+    }
+
+    const errors: Array<BlockError> = []
+    const id_and_childs = children_ids.reduce( (dict, child_id) =>{
+        const { block, parent_id } = data[child_id]
+        if (parent_id === null){ return dict }
+        const notion_id = data[parent_id].notion_id
+        if (notion_id.length == 0){
+            errors.push({ message:"missing notion-id", block: data[parent_id].block })
+            return dict
+        }
+        if (notion_id in dict){
+            dict[notion_id].push(block)
+        } else {
+            dict[notion_id] = [block]
         }
         return dict
     }, {} as Record<string, Array<BlockObjectRequest>> )
+    if (errors.length < 0){
+        errors.forEach(e => console.log(e))
+    }
 
-
-    const failed_logs: Record<string, string> = {}
+    const failed_logs: Record<string, string> = (errors.length == 0) ? {} : {"some children": "cannot find parent-blocks-notion-id"}
     await Object.keys(id_and_childs).reduce((promise, id) => {
         return promise.then(async () => {
             await notion.blocks.children.append({block_id: id, children: id_and_childs[id]})
@@ -85,7 +130,6 @@ async function call_api<T>(
 
 async function data_to_page(
   	request: Request,
-	
 ){
     const header_ops = check_origin(request.headers, HEADER_OPS)
     const headers = new Headers(header_ops)
@@ -100,8 +144,8 @@ async function data_to_page(
         return  new Response("", {headers, "status" : 401 , "statusText" : "Unauthorized" })
     }
 
-	const request_json: RequestJson = await request.json()
-  	const { url, html_doc, target_id } = request_json
+    const request_json: RequestJson = await request.json()
+    const { url, html_doc, target_id } = request_json
     
     if (url.startsWith("https://zenn.dev")){
         if (!url.includes("articles") && !url.includes("scrap")){

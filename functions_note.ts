@@ -145,7 +145,7 @@ function to_blocks(
                     }
                 } else {
                     const [ inner_ele, capition ] = elem.children
-                    const cap_blocks = (capition.childNodes.length == 0)
+                    const cap_blocks = (capition == undefined || capition.childNodes.length == 0)
                         ? [{type: "paragraph" as const, paragraph:{ rich_text: [] }}]
                         : to_blocks(capition)
                     if (inner_ele.nodeName == "A"){
@@ -160,15 +160,19 @@ function to_blocks(
                         }
                     }
                     else if (inner_ele.nodeName == "BLOCKQUOTE"){
-                        const p_tag = inner_ele.getElementsByTagName("p")[0]
-                        const { firstline, children } = arrange_children( [cap_blocks[0] ,...to_blocks(p_tag)] )
-                        const callout_block = create_block({ type:"MESSAGE", kind:"message", firstline, children })
-                        if (callout_block.type == "callout"){
-                            callout_block.callout.color = "gray_background"
+                        const text_elem = inner_ele.firstElementChild
+                        if (text_elem === null){
+                            errors.push({ msg: "quote's firstElementChild is null", type:"unexpected node-tree", elem:inner_ele})
+                        } else {
+                            const { firstline, children } = arrange_children( [cap_blocks[0] ,...to_blocks(text_elem)] )
+                            const callout_block = create_block({ type:"MESSAGE", kind:"message", firstline, children })
+                            if (callout_block.type == "callout"){
+                                callout_block.callout.color = "gray_background"
+                            }
+                            blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
+                            blocks.push( callout_block )
+                            blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
                         }
-                        blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
-                        blocks.push( callout_block )
-                        blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
                     }
                     else {
                         errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })
@@ -191,7 +195,7 @@ function to_blocks(
             console.log({ msg: er.msg, elem: er.elem.outerHTML })
             return (bool) ? bool : er.type != "not implemented"
         }, false)
-        if (is_throw){ throw new Error("Some error in block making") }
+        //if (is_throw){ throw new Error("Some error in block making") }
     }
     return blocks
 }
@@ -213,7 +217,6 @@ export async function note_article_to_blocks(
         if (document === null){ throw new Error() }
 
         const page_title = document.getElementsByClassName("o-noteContentText__title")[0].innerText.replaceAll(/\s/g, "")
-        console.log(page_title)
         const link = document.getElementsByClassName("o-noteEyecatch")[0].children[0].getAttribute("href")
         const icon: CreatePageBodyParameters["icon"] = (link===null) ? null : { type: "external", external: { url: link} }
         const author = document.getElementsByClassName("o-noteContentText__author")[0].innerText.split("\n")[0]

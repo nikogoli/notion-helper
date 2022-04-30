@@ -49,7 +49,7 @@ export function plaintx_to_richtx(
     let base = base_node
     while( tag != "end" ){
         const par = base.parentElement
-        if (par !== null && ["A", "SUP", "CODE", "STRONG", "EM", "S"].includes(par.nodeName) ){
+        if (par !== null && ["A", "SUP", "CODE", "STRONG", "EM", "S", "B", "I"].includes(par.nodeName) ){
             if (par.nodeName == "A"){ link = par.getAttribute("href") ?? "" }
             annotations.push(par.nodeName)
             tag = par.nodeName
@@ -128,8 +128,8 @@ export function set_annos(
 ){
     if (annos.length == 0){ return tx_obj }
     annos.forEach(an => {
-        if (an=="EM"){ tx_obj[0].annotations.italic = true }
-        else if (an=="STRONG"){ tx_obj[0].annotations.bold = true }
+        if (an=="EM" || an == "I"){ tx_obj[0].annotations.italic = true }
+        else if (an=="STRONG" || an == "B"){ tx_obj[0].annotations.bold = true }
         else if (an=="S"){ tx_obj[0].annotations.strikethrough = true }
         else if (an=="CODE"){ tx_obj[0].annotations.code = true }
     })

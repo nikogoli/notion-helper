@@ -51,7 +51,7 @@ function to_blocks(
                 plaintx_to_richtx(elem).forEach( tx => texts.push(tx) )
             }
         }
-        else if ( ["A", "CODE", "STRONG", "EM", "S"].includes(child_nd.nodeName)){
+        else if ( ["A", "CODE", "STRONG", "EM", "S", "B", "I"].includes(child_nd.nodeName)){
             const elem = elements.shift()
             if (elem == undefined){
                 console.log(child_nd)
@@ -146,7 +146,7 @@ function to_blocks(
                 } else {
                     const [ inner_ele, capition ] = elem.children
                     const cap_blocks = (capition == undefined || capition.childNodes.length == 0)
-                        ? [{type: "paragraph" as const, paragraph:{ rich_text: [] }}]
+                        ? [{type: "paragraph" as const, paragraph:{ rich_text: to_richtx("text", " ") }}]
                         : to_blocks(capition)
                     if (inner_ele.nodeName == "A"){
                         const link = inner_ele.getAttribute("href")

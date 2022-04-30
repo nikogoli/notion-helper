@@ -1,9 +1,9 @@
 async function arrange_scrap() {
 
 	const url = chrome.runtime.getURL('.env')
-	const response = await fetch(url)
-	const response_text = await response.text()
-	const env_obj = JSON.parse(response_text)
+	const env_obj = await fetch(url)
+		.then(async response => await response.text() )
+		.then( tx => JSON.parse(tx) )
 	const { URL_PREFIX, USER_TOKEN, TARGET_ID } = env_obj
 
 	const headers = new Headers()
@@ -16,10 +16,7 @@ async function arrange_scrap() {
 	}
 	
 	const URL = `${URL_PREFIX}/withid/pages/create`
-
-	
 	const page_response = await fetch(URL, {
-		//mode: "no-cors",
 		credentials: "include",
 		method: 'POST',
 		headers: headers,
@@ -28,45 +25,59 @@ async function arrange_scrap() {
 	
 	const responseText = await page_response.text()
 
-	if (page_response.ok){
-		const responseJson = JSON.parse(responseText)
-		const { object, id } = responseJson
-		window.alert(`create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!`)
-		console.log(`create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!`)
-		console.log(responseJson)
-	} else {
-		if (page_response.status == "401"){
-			window.alert("Request refused. Please check wheather USER-TOKEN is valid.")
-		}
-		else if (page_response.status == "400"){
-			try {
-				const responseJson = JSON.parse(responseText)
-				if ("code" in responseJson){
-					const { name, status, code, body } = responseJson
-					const { message } = JSON.parse(body)
-					window.alert(`creation failed\nname: ${name}\ncode: ${code}\nstatus: ${status}\n${message.slice(0,200)}...`)
-					console.error({ name, status, code, message })
-				} else {
-					window.alert("Faild. Please check console-message")
-					console.error(responseJson)
-				}
-			} catch(_e){
-				window.alert("Faild. Please check console-message")
-				console.error(responseText)
-			}
-		}
-		else if (page_response.status == "409"){
+	switch(page_response.status){
+		case "200": {
 			const responseJson = JSON.parse(responseText)
-			const { object, id, logs } = responseJson
-			const ids = [...Object.keys(JSON.parse(logs))].join("\n")
-			window.alert(`create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!\n\nHowever, failed to append some children blocks to following parent(s):\n${ids}`)
-			console.log(`create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!`)
+			const { object, id } = responseJson
+			const test = `create '${object}'.\nCheck "https://notion.so/${id.replaceAll("-","")}"!!`
+			window.alert(test)
+			console.log(test)
 			console.log(responseJson)
-			console.log(JSON.parse(logs))
+			return
 		}
-		else {
-			window.alert("Faild. Please check console-message")
-			console.error(responseText)
+		case "201": {
+			const responseJson = JSON.parse(responseText)
+			const { object, id, message } = responseJson
+			const test = `create '${object}', though ${message}.\n\nCheck "https://notion.so/${id.replaceAll("-","")}"`
+			window.alert(test)
+			console.log(test)
+			console.log(responseJson)
+			return
+		}
+		case "400":{
+			await JSON.parse(responseText)
+			.then( json => {
+				if ("stack" in json){
+					const { name, message, stack } = json
+					window.alert(`Convertion failed.\n${name}: ${message}\n${stack}`)
+					console.error(json)
+				} else {
+					const { name, status, code, body } = json
+					const { message } = JSON.parse(body)
+					window.alert(`Creation failed\nname: ${name}\ncode: ${code}\nstatus: ${status}\n${message.slice(0,200)}...`)
+					console.error({ name, status, code, message })
+				}
+			})
+			.catch(_e => {
+				window.alert("Creation Faild. Please check console-message.")
+				console.error(responseText)
+			})
+			return
+		}
+		case "401": {
+			window.alert("Request refused. Please check wheather USER-TOKEN is valid.")
+			console.log(page_response)
+			return
+		}
+		case "404": {
+			window.alert("Requested URL is not found.")
+			console.log(page_response)
+			return
+		}
+		case "501":{
+			window.alert("Requested URL is not proper one.")
+			console.log(page_response)
+			return
 		}
 	}
 }

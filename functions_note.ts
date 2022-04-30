@@ -135,7 +135,7 @@ function to_blocks(
                     else if (cont_type == "spotify"){
                         const audiolink = elem.getElementsByTagName("iframe")[0].getAttribute("src")
                         if (audiolink !== null){
-                            blocks.push( { type:"audio", audio: { external: {url: audiolink }} } )
+                            blocks.push( { type:"embed", embed: { url: audiolink} } )
                         } else {
                             errors.push({ msg: "failed to get audio link", type:"not implemented", elem: elem.getElementsByTagName("iframe")[0] })    
                         }

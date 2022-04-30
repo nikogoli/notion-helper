@@ -137,25 +137,31 @@ function to_blocks(
                     }
                 } else {
                     const [ inner_ele, capition ] = elem.children
+                    const cap_blocks = (capition.childNodes.length == 0)
+                        ? [{type: "paragraph" as const, paragraph:{ rich_text: [] }}]
+                        : to_blocks(capition)
                     if (inner_ele.nodeName == "A"){
                         const link = inner_ele.getAttribute("href")
                         if (link === null){
                             errors.push({ msg: "A-element does not have 'href'", type:"attribute missing", elem:inner_ele})
-                        }
-                        else {
+                        } else {
                             blocks.push(create_block({ type:"IMG", link }))
+                            if (cap_blocks[0].type != "paragraph" || (cap_blocks[0].type=="paragraph" && cap_blocks[0].paragraph.rich_text.length > 0)){
+                                blocks.push(cap_blocks[0])
+                            }
                         }
                     }
                     else if (inner_ele.nodeName == "BLOCKQUOTE"){
                         const p_tag = inner_ele.getElementsByTagName("p")[0]
-                        const { firstline, children } = arrange_children( to_blocks(p_tag) )
-                        blocks.push( create_block({ type:"BLOCKQUOTE", firstline, children }) )
+                        const { firstline, children } = arrange_children( [cap_blocks[0] ,...to_blocks(p_tag)] )
+                        const callout_block = create_block({ type:"MESSAGE", kind:"message", firstline, children })
+                        if (callout_block.type == "callout"){
+                            callout_block.callout.color = "gray_background"
+                        }
+                        blocks.push( callout_block )
                     }
                     else {
                         errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })
-                    }
-                    if (capition.children.length > 0){
-                        to_blocks(capition).forEach(b => blocks.push(b))
                     }
                 }
             }

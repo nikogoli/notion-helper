@@ -132,6 +132,9 @@ function to_blocks(
                     else if (cont_type == "twitter"){
                         blocks.push( { type:"embed", embed:{ url: link} } )
                     }
+                    else if (cont_type == "spotify"){
+                        blocks.push( { type:"audio", audio: { external: {url: link }} } )
+                    }
                     else {
                         errors.push({ msg: "This FIGURE-element is not implemented", type:"not implemented", elem })
                     }
@@ -158,7 +161,9 @@ function to_blocks(
                         if (callout_block.type == "callout"){
                             callout_block.callout.color = "gray_background"
                         }
+                        blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
                         blocks.push( callout_block )
+                        blocks.push( { type: "paragraph", paragraph: { rich_text: [] } } )
                     }
                     else {
                         errors.push({ msg: "This inner element is not implemented", type:"not implemented", elem:inner_ele })

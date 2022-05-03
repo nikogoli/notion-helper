@@ -93,9 +93,6 @@ async function call_api<T>(
             }
         }
     })
-    if (errors.length < 0){
-        errors.forEach(e => console.log(e))
-    }
 
     const failed_logs: Array<{parent_id:string, error:string}> = []
     await Object.keys(id_and_childs).reduce((promise, id) => {
@@ -107,10 +104,14 @@ async function call_api<T>(
     }, Promise.resolve())
 
     if (failed_logs.length > 0){
-        return { ok: true, data: JSON.stringify({...notion_response, message: "Some children-appending failed", logs:failed_logs}), status: 201}
+        failed_logs.forEach(e => console.log(e))
+        const message = "Some children-appending failed"
+        return { ok: true, data: JSON.stringify({...notion_response, message, logs:failed_logs}), status: 201}
     }
     else if (errors.length > 0){
-        return { ok: true, data: JSON.stringify({...notion_response, message: "Some children-appending failed because parents have no notion-id", logs:errors}), status: 201}
+        errors.forEach(e => console.log(e))
+        const message = "Some children-appending failed because parents have no notion-id"
+        return { ok: true, data: JSON.stringify({...notion_response, message, logs:errors}), status: 201}
     } else {
         return { ok: true, data: JSON.stringify(notion_response), status: 200}
     }
@@ -160,23 +161,27 @@ async function data_to_page(
     const { url, html_doc, target_id } = request_json
     
     const checked = check_url(url)
-    if (checked.is_valid == false){
-        return new Response("not proper URL", {headers: headers, status: 501})
-    }
 
-    const toblock_function = checked.function
-    const convertion_result = await toblock_function(url, html_doc)
-    
-    if (convertion_result.ok == false){
-        const { name, message, stack } = convertion_result.data
-        return new Response(JSON.stringify({name, message, stack}), {headers, status:400})
+    switch(checked.is_valid){
+        case false:
+            return new Response("not proper URL", {headers: headers, status: 501})
+
+        case true: {
+            const toblock_function = checked.function
+            const convertion_result = await toblock_function(url, html_doc)
+
+            switch (convertion_result.ok){
+                case false: {
+                    const { name, message, stack } = convertion_result.data
+                    return new Response(JSON.stringify({name, message, stack}), {headers, status:400})
+                }
+                case true: {
+                    const { data, status } = await call_api(target_id, convertion_result.data)
+                    return new Response(data, {headers, status})
+                }
+            }
+        }
     }
-    
-    const { ok, data, status } = await call_api(target_id, convertion_result.data)
-    if (ok == false){
-        console.log(JSON.parse(data))
-    }
-    return new Response(data, {headers, status})
 }
 
 
